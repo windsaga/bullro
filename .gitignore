@@ -1,0 +1,18 @@
+.discuss/
+posts/
+logs/
+
+# 민감 정보
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# .claude는 기본 무시하되 skills는 git에 포함
+.claude/
+!.claude/skills/
+!.claude/skills/**
+

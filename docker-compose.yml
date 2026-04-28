@@ -1,0 +1,27 @@
+services:
+  pipeline:
+    build: .
+    container_name: ai-blog-pipeline
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./posts:/app/posts
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - blog-net
+
+  scheduler:
+    image: mcuadros/ofelia:latest
+    container_name: blog-scheduler
+    depends_on:
+      - pipeline
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./scheduler.ini:/etc/ofelia/config.ini
+    restart: unless-stopped
+    networks:
+      - blog-net
+
+networks:
+  blog-net:
