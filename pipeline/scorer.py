@@ -1,14 +1,14 @@
-"""복합 신호 점수 산정 + sentence-transformers 기반 중복 제거."""
+"""복합 신호 점수 산정 + DeepSeek 기반 중복 제거."""
 from __future__ import annotations
 
 import json
 import logging
 import math
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
+from pipeline.llm import deepseek
 from pipeline.models import Article, ScoredArticle
 
 log = logging.getLogger(__name__)
@@ -19,27 +19,30 @@ W_REDDIT = 0.3
 W_HF = 0.2
 W_GITHUB = 0.1
 
-_embedder = None
+DEDUP_BATCH_SIZE = 20
+HISTORY_LIMIT = 60
 
+DEDUP_SYSTEM = """당신은 AI 기술 블로그의 중복 주제 검수자입니다.
+후보 기사가 기존 게시글 또는 같은 후보 목록의 더 높은 점수 후보와 사실상 같은 주제인지 판단하세요.
 
-def _get_embedder():
-    global _embedder
-    if _embedder is None:
-        try:
-            from sentence_transformers import SentenceTransformer
-            _embedder = SentenceTransformer("all-MiniLM-L6-v2")
-            log.info("sentence-transformers 모델 로드 완료")
-        except ImportError:
-            log.warning("sentence-transformers 미설치 — 중복 탐지 건너뜀")
-    return _embedder
+중복으로 볼 조건:
+- 같은 논문/제품/모델/릴리즈/사건을 다룸
+- 제목 표현만 다르고 핵심 뉴스와 독자에게 줄 내용이 거의 같음
+- 후속 기사라도 새 정보가 거의 없고 기존 게시글과 같은 글감임
+
+중복으로 보지 않을 조건:
+- 같은 회사/모델군이어도 릴리즈, 벤치마크, 적용 사례, 비판처럼 초점이 다름
+- 기존 글과 이어지는 후속 소식이지만 새 데이터나 의사결정 포인트가 뚜렷함
+
+반드시 JSON만 출력하세요."""
 
 
 def score_and_deduplicate(
     articles: list[Article],
     history_path: Path,
-    similarity_threshold: float = 0.75,
+    confidence_threshold: float = 0.75,
 ) -> list[ScoredArticle]:
-    """점수 산정 → 기존 게시글과 유사도 중복 제거 → composite_score 내림차순 반환."""
+    """점수 산정 → DeepSeek 중복 제거 → composite_score 내림차순 반환."""
 
     # 1. 신호 수집
     hn_pts = [float(a.signals.get("hn_points", 0)) for a in articles]
@@ -73,46 +76,12 @@ def score_and_deduplicate(
     # 3. 점수 내림차순 정렬
     scored.sort(key=lambda x: x.composite_score, reverse=True)
 
-    # 4. 임베딩 + 중복 제거
-    embedder = _get_embedder()
-    if embedder is None:
-        log.warning("임베딩 불가 — 중복 탐지 없이 진행")
-        return scored
-
-    history_embeddings = _load_history_embeddings(history_path)
-
-    texts = [f"{a.title} {a.content[:200]}" for a in scored]
-    embeddings = embedder.encode(texts, normalize_embeddings=True)
-
-    for i, a in enumerate(scored):
-        a.embedding = embeddings[i].tolist()
-
-    # 기존 게시글과 유사도 비교
-    filtered: list[ScoredArticle] = []
-    for a in scored:
-        emb = np.array(a.embedding)
-        is_dup = False
-        for hist_emb in history_embeddings:
-            similarity = float(np.dot(emb, np.array(hist_emb)))
-            if similarity >= similarity_threshold:
-                log.debug(f"중복 제거: {a.title[:40]} (similarity={similarity:.3f})")
-                is_dup = True
-                break
-        if not is_dup:
-            filtered.append(a)
-
-    # 새로 선택된 항목들끼리도 중복 제거
-    deduped: list[ScoredArticle] = []
-    deduped_embs: list[np.ndarray] = []
-    for a in filtered:
-        emb = np.array(a.embedding)
-        is_dup = any(
-            float(np.dot(emb, e)) >= similarity_threshold
-            for e in deduped_embs
-        )
-        if not is_dup:
-            deduped.append(a)
-            deduped_embs.append(emb)
+    # 4. DeepSeek 중복 제거
+    deduped = _deduplicate_with_deepseek(
+        scored,
+        history_path=history_path,
+        confidence_threshold=confidence_threshold,
+    )
 
     log.info(f"점수 산정: {len(scored)}건 → 중복 제거 후 {len(deduped)}건")
     return deduped
@@ -126,12 +95,139 @@ def _zscore(values: list[float]) -> list[float]:
     return ((arr - arr.mean()) / std).tolist()
 
 
-def _load_history_embeddings(history_path: Path) -> list[list[float]]:
+def _deduplicate_with_deepseek(
+    scored: list[ScoredArticle],
+    history_path: Path,
+    confidence_threshold: float,
+) -> list[ScoredArticle]:
+    history = _load_history_posts(history_path)
+    accepted: list[ScoredArticle] = []
+
+    for start in range(0, len(scored), DEDUP_BATCH_SIZE):
+        batch = scored[start:start + DEDUP_BATCH_SIZE]
+        duplicate_ids = _find_duplicate_ids(
+            batch=batch,
+            accepted=accepted,
+            history=history,
+            confidence_threshold=confidence_threshold,
+            id_offset=start,
+        )
+        for i, article in enumerate(batch, start=start):
+            if str(i) in duplicate_ids:
+                continue
+            accepted.append(article)
+
+    return accepted
+
+
+def _find_duplicate_ids(
+    batch: list[ScoredArticle],
+    accepted: list[ScoredArticle],
+    history: list[dict],
+    confidence_threshold: float,
+    id_offset: int,
+) -> set[str]:
+    candidates = [
+        {
+            "id": str(id_offset + i),
+            "title": a.title,
+            "url": a.url,
+            "source": a.source,
+            "published_at": a.published_at,
+            "composite_score": round(a.composite_score, 3),
+            "summary": a.content[:600],
+        }
+        for i, a in enumerate(batch)
+    ]
+    prior_candidates = [
+        {
+            "id": f"selected-{i}",
+            "title": a.title,
+            "url": a.url,
+            "source": a.source,
+            "summary": a.content[:300],
+        }
+        for i, a in enumerate(accepted[-HISTORY_LIMIT:])
+    ]
+
+    prompt = f"""후보 기사 중 중복인 항목만 골라 JSON 배열로 반환하세요.
+
+confidence가 {confidence_threshold:.2f} 이상일 때만 중복으로 판정하세요.
+후보 목록은 composite_score 내림차순입니다. 후보끼리 중복이면 더 낮은 점수 후보를 duplicate로 표시하세요.
+
+기존 게시글:
+{json.dumps(history[-HISTORY_LIMIT:], ensure_ascii=False, indent=2)}
+
+이미 유지하기로 한 이번 실행 후보:
+{json.dumps(prior_candidates, ensure_ascii=False, indent=2)}
+
+검토할 후보:
+{json.dumps(candidates, ensure_ascii=False, indent=2)}
+
+응답 형식:
+[
+  {{
+    "id": "중복 후보 id",
+    "matched_with": "기존 게시글 제목 또는 후보 id",
+    "confidence": 0.0,
+    "reason": "한 줄 이유"
+  }}
+]"""
+
+    try:
+        raw = deepseek(prompt, system=DEDUP_SYSTEM, max_tokens=1536, temperature=0.0)
+        items = _parse_json_array(raw)
+    except Exception as e:
+        log.warning(f"DeepSeek 중복 탐지 실패 — 해당 배치 통과: {e}")
+        return set()
+
+    duplicate_ids: set[str] = set()
+    candidate_ids = {c["id"] for c in candidates}
+    for item in items:
+        item_id = str(item.get("id", ""))
+        confidence = float(item.get("confidence", 0))
+        if item_id in candidate_ids and confidence >= confidence_threshold:
+            log.debug(
+                "중복 제거: %s (matched=%s, confidence=%.2f)",
+                item_id,
+                item.get("matched_with", ""),
+                confidence,
+            )
+            duplicate_ids.add(item_id)
+    return duplicate_ids
+
+
+def _parse_json_array(text: str) -> list[dict]:
+    text = text.strip()
+    if "```" in text:
+        start = text.find("[", text.find("```"))
+        end = text.rfind("]") + 1
+        text = text[start:end]
+    elif not text.startswith("["):
+        start = text.find("[")
+        end = text.rfind("]") + 1
+        text = text[start:end]
+    return json.loads(text)
+
+
+def _load_history_posts(history_path: Path) -> list[dict]:
     if not history_path.exists():
         return []
     try:
         posts = json.loads(history_path.read_text(encoding="utf-8"))
-        return [p["embedding"] for p in posts if p.get("embedding")]
+        return [
+            {
+                "title": p.get("title", ""),
+                "url": p.get("url", ""),
+                "slug": p.get("slug", ""),
+                "angle": p.get("angle", ""),
+                "tags": p.get("tags", []),
+                "status": p.get("status", ""),
+                "date": p.get("date", ""),
+            }
+            for p in posts
+            if p.get("title") or p.get("url")
+        ]
     except Exception as e:
         log.warning(f"게시 이력 로드 실패: {e}")
         return []

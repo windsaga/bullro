@@ -61,7 +61,7 @@ def run_pipeline() -> None:
     scored = score_and_deduplicate(
         articles=raw_articles,
         history_path=cfg.POSTS_JSON,
-        similarity_threshold=cfg.SIMILARITY_THRESHOLD,
+        confidence_threshold=cfg.DEDUP_CONFIDENCE_THRESHOLD,
     )
     top20 = scored[:20]
     if not top20:
@@ -276,7 +276,6 @@ def _record_history(post: Post, topic: SelectedTopic) -> None:
         "slug": post.slug,
         "angle": post.draft.facts.topic.angle,
         "status": post.status,
-        "embedding": topic.article.embedding if hasattr(topic.article, "embedding") else [],
         "tags": post.seo.tags,
     })
     cfg.POSTS_JSON.write_text(json.dumps(posts, ensure_ascii=False, indent=2), encoding="utf-8")

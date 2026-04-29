@@ -15,7 +15,7 @@ NAS Docker cron (매일 06:00 KST)
   arxiv / GitHub / 공식 블로그 / HN / Reddit / HF / PwC
         │
         ▼
-  복합 신호 점수 (z-score) + 중복 제거 (sentence-transformers)
+  복합 신호 점수 (z-score) + 중복 제거 (DeepSeek)
         │ top 20
         ▼
   P1 Triage (DeepSeek) ── top 1~3 토픽 선별
@@ -170,7 +170,7 @@ Claude Code + Codex + Gemini가 3자 리뷰 후 최종고를 WordPress에 업로
 | NVIDIA API (포스트 30편/월) | ~$3~5 |
 | NAS 전기세 | ~2,000원 |
 | Pollinations.ai 이미지 | 무료 |
-| sentence-transformers (로컬) | 무료 |
+| DeepSeek 중복 탐지 | NVIDIA API 비용에 포함 |
 | **합계** | **~1.5~2만원/월** |
 
 ---

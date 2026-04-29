@@ -18,7 +18,6 @@ class Article:
 @dataclass
 class ScoredArticle(Article):
     composite_score: float = 0.0
-    embedding: list[float] = field(default_factory=list)
 
 
 @dataclass

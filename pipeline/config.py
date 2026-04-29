@@ -40,7 +40,7 @@ class Config:
     # 파이프라인 동작
     DAILY_POST_COUNT: int = 2
     AUTO_PUBLISH: bool = False          # v2에서 True로 변경
-    SIMILARITY_THRESHOLD: float = 0.75  # 중복 탐지 임계값
+    DEDUP_CONFIDENCE_THRESHOLD: float = 0.75  # DeepSeek 중복 판정 confidence 임계값
 
     # 경로
     BASE_DIR: Path = Path("/app")
@@ -75,8 +75,8 @@ class Config:
 
         self.DAILY_POST_COUNT = int(os.getenv("DAILY_POST_COUNT", "2"))
         self.AUTO_PUBLISH = os.getenv("AUTO_PUBLISH", "false").lower() == "true"
-        self.SIMILARITY_THRESHOLD = float(
-            os.getenv("SIMILARITY_THRESHOLD", "0.75")
+        self.DEDUP_CONFIDENCE_THRESHOLD = float(
+            os.getenv("DEDUP_CONFIDENCE_THRESHOLD", "0.75")
         )
 
         base = Path(os.getenv("BASE_DIR", "/app"))
