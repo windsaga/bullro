@@ -41,15 +41,30 @@ def _get_client(slow: bool = False) -> OpenAI:
         return _client_fast
 
 
-def _call_with_retry(fn, retries: int = 3, backoff: float = 10.0):
+def _is_rate_limit(e: Exception) -> bool:
+    msg = str(e)
+    return "429" in msg or "Too Many Requests" in msg or "rate limit" in msg.lower()
+
+
+def _call_with_retry(fn, retries: int = 5, backoff: float = 10.0):
     for attempt in range(retries):
         try:
             return fn()
         except Exception as e:
             if attempt == retries - 1:
                 raise
-            wait = backoff * (2 ** attempt)
-            log.warning(f"NVIDIA API 오류 (시도 {attempt+1}/{retries}): {e} — {wait:.0f}초 대기")
+            # 429 Rate Limit: 60s 베이스로 지수 백오프, 최대 120s
+            # 그 외 오류(timeout 등): 10s 베이스
+            if _is_rate_limit(e):
+                wait = min(60.0 * (2 ** attempt), 120.0)
+                log.warning(
+                    f"NVIDIA API Rate Limit (시도 {attempt+1}/{retries}) — {wait:.0f}초 대기 후 재시도"
+                )
+            else:
+                wait = backoff * (2 ** attempt)
+                log.warning(
+                    f"NVIDIA API 오류 (시도 {attempt+1}/{retries}): {e} — {wait:.0f}초 대기"
+                )
             time.sleep(wait)
 
 
