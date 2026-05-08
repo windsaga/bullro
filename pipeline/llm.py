@@ -2,11 +2,29 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 
 from openai import OpenAI
 
 from pipeline.config import cfg
+
+# NVIDIA 무료 티어: 5 RPM 제한 → 호출 간 최소 13초 간격 자체 적용
+_last_call_time: float = 0.0
+_rate_lock = threading.Lock()
+MIN_CALL_INTERVAL = 13.0  # seconds (60s / 5RPM + 1s 버퍼)
+
+
+def _rate_limit_wait() -> None:
+    """API 호출 전 최소 간격 보장 — 429 사전 방지."""
+    global _last_call_time
+    with _rate_lock:
+        elapsed = time.time() - _last_call_time
+        if elapsed < MIN_CALL_INTERVAL:
+            wait = MIN_CALL_INTERVAL - elapsed
+            log.debug(f"자체 rate limit: {wait:.1f}초 대기")
+            time.sleep(wait)
+        _last_call_time = time.time()
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +66,7 @@ def _is_rate_limit(e: Exception) -> bool:
 
 def _call_with_retry(fn, retries: int = 5, backoff: float = 10.0):
     for attempt in range(retries):
+        _rate_limit_wait()
         try:
             return fn()
         except Exception as e:

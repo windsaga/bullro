@@ -76,12 +76,18 @@ def score_and_deduplicate(
     # 3. 점수 내림차순 정렬
     scored.sort(key=lambda x: x.composite_score, reverse=True)
 
-    # 4. DeepSeek 중복 제거
+    # 4. DeepSeek 중복 제거 — top 30만 대상으로 한정 (API 호출 절약)
+    # 어차피 top 20이 목표이므로 하위 기사는 dedup 불필요
+    dedup_candidates = scored[:30]
     deduped = _deduplicate_with_deepseek(
-        scored,
+        dedup_candidates,
         history_path=history_path,
         confidence_threshold=confidence_threshold,
     )
+    # top 30 밖의 기사는 dedup 없이 뒤에 붙임
+    deduped_urls = {a.url for a in deduped}
+    remainder = [a for a in scored[30:] if a.url not in deduped_urls]
+    deduped = deduped + remainder
 
     log.info(f"점수 산정: {len(scored)}건 → 중복 제거 후 {len(deduped)}건")
     return deduped
