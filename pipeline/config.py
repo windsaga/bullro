@@ -16,6 +16,9 @@ class Config:
     NVIDIA_API_KEY: str = ""
     NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
 
+    # Anthropic API (Claude fallback)
+    ANTHROPIC_API_KEY: str = ""
+
     # GitHub
     GITHUB_TOKEN: str = ""
 
@@ -54,6 +57,7 @@ class Config:
     def __init__(self) -> None:
         self.NVIDIA_API_KEY = _require("NVIDIA_API_KEY")
         self.NVIDIA_BASE_URL = os.getenv("NVIDIA_BASE_URL", self.NVIDIA_BASE_URL)
+        self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
         self.GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
 
