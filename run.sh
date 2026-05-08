@@ -119,7 +119,7 @@ if [ $TEST_MODE -eq 1 ]; then
 else
     echo "[5/5] 서비스 시작 (스케줄러 포함)..."
     compose down 2>/dev/null || true
-    compose up -d
+    compose up -d --build --force-recreate
 
     echo ""
     echo "============================================"
