@@ -31,6 +31,7 @@ CLAUDE_SONNET = "claude-sonnet-4-6"  # GLM 대체: 작문/창작 (품질)
 _client_fast: OpenAI | None = None   # DeepSeek용
 _client_slow: OpenAI | None = None   # GLM-5.1용
 _anthropic_client: anthropic.Anthropic | None = None
+_nvidia_exhausted: bool = False      # True가 되면 이후 모든 호출을 Claude로 직행
 
 
 class RateLimitError(Exception):
@@ -158,8 +159,14 @@ def deepseek(
     temperature: float = 0.3,
 ) -> str:
     """분석·분류·검증용. thinking 비활성화로 속도 우선.
-    NVIDIA 429 소진 시 claude-haiku-4-5로 자동 폴백.
+    NVIDIA 429 소진 시 claude-haiku-4-5로 자동 폴백. 이후 호출은 바로 Claude 직행.
     """
+    global _nvidia_exhausted
+
+    if _nvidia_exhausted:
+        log.debug("NVIDIA 소진 상태 — Claude Haiku 직행")
+        return _claude_fallback(prompt, system, max_tokens, temperature, CLAUDE_HAIKU)
+
     client = _get_client(slow=False)
     messages = []
     if system:
@@ -180,9 +187,10 @@ def deepseek(
     try:
         result = _call_with_retry(_call)
     except RateLimitError:
-        log.warning("NVIDIA DeepSeek 한도 소진 → Claude Haiku 폴백")
+        _nvidia_exhausted = True
+        log.warning("NVIDIA DeepSeek 한도 소진 → Claude Haiku 폴백 (이후 모든 호출 Claude 직행)")
         result = _claude_fallback(prompt, system, max_tokens, temperature, CLAUDE_HAIKU)
-    log.debug(f"DeepSeek/Haiku 응답 {len(result)}자")
+    log.debug(f"응답 {len(result)}자")
     return result
 
 
@@ -193,8 +201,14 @@ def glm(
     temperature: float = 0.7,
 ) -> str:
     """창작·작문용. thinking 활성화 + 스트리밍.
-    NVIDIA 429 소진 시 claude-sonnet-4-6으로 자동 폴백.
+    NVIDIA 429 소진 시 claude-sonnet-4-6으로 자동 폴백. 이후 호출은 바로 Claude 직행.
     """
+    global _nvidia_exhausted
+
+    if _nvidia_exhausted:
+        log.debug("NVIDIA 소진 상태 — Claude Sonnet 직행")
+        return _claude_fallback(prompt, system, max_tokens, temperature, CLAUDE_SONNET)
+
     client = _get_client(slow=True)
     messages = []
     if system:
@@ -223,7 +237,8 @@ def glm(
     try:
         result = _call_with_retry(_call)
     except RateLimitError:
-        log.warning("NVIDIA GLM-5.1 한도 소진 → Claude Sonnet 폴백")
+        _nvidia_exhausted = True
+        log.warning("NVIDIA GLM-5.1 한도 소진 → Claude Sonnet 폴백 (이후 모든 호출 Claude 직행)")
         result = _claude_fallback(prompt, system, max_tokens, temperature, CLAUDE_SONNET)
-    log.debug(f"GLM/Sonnet 응답 {len(result)}자")
+    log.debug(f"응답 {len(result)}자")
     return result
