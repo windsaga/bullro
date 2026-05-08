@@ -102,23 +102,27 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
         log.info(f"[{title_short}] P4 점수: {critique.total}/100")
 
         # ── 품질 분기 게이트 ─────────────────────────────────────
-        if critique.total < 60:
-            log.warning(f"[{title_short}] 품질 미달 ({critique.total}) — Slack 알림 후 종료")
-            _save_draft_file(draft_v1, run_date, status="low_quality")
-            notify_slack(event="low_quality", topic=topic, critique=critique)
-            return None
-
-        if 60 <= critique.total < 75:
-            log.info(f"[{title_short}] 60~74점 — P3 재생성 1회 시도")
-            draft_v1 = p3_draft(facts, angle=topic.angle, critique_hint=critique)
-            critique = p4_critique(draft_v1, facts)
-            log.info(f"[{title_short}] P4 재채점: {critique.total}/100")
-            if critique.total < 75:
-                log.info(f"[{title_short}] 재시도 후에도 <75 — 보류 큐 저장")
-                _save_draft_file(draft_v1, run_date, status="pending")
-                _append_pending(topic, draft_v1, critique)
-                notify_slack(event="pending", topic=topic, critique=critique)
+        min_score = cfg.MIN_QUALITY_SCORE
+        if min_score > 0:
+            if critique.total < 60:
+                log.warning(f"[{title_short}] 품질 미달 ({critique.total}) — Slack 알림 후 종료")
+                _save_draft_file(draft_v1, run_date, status="low_quality")
+                notify_slack(event="low_quality", topic=topic, critique=critique)
                 return None
+
+            if 60 <= critique.total < min_score:
+                log.info(f"[{title_short}] 60~{min_score-1}점 — P3 재생성 1회 시도")
+                draft_v1 = p3_draft(facts, angle=topic.angle, critique_hint=critique)
+                critique = p4_critique(draft_v1, facts)
+                log.info(f"[{title_short}] P4 재채점: {critique.total}/100")
+                if critique.total < min_score:
+                    log.info(f"[{title_short}] 재시도 후에도 <{min_score} — 보류 큐 저장")
+                    _save_draft_file(draft_v1, run_date, status="pending")
+                    _append_pending(topic, draft_v1, critique)
+                    notify_slack(event="pending", topic=topic, critique=critique)
+                    return None
+        else:
+            log.info(f"[{title_short}] MIN_QUALITY_SCORE=0 — 품질 게이트 건너뜀 ({critique.total}점)")
 
         # P5: 수정본 v2 (GLM-5.1)
         draft_v2 = p5_revise(draft_v1, critique)

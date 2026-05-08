@@ -44,6 +44,7 @@ class Config:
     DAILY_POST_COUNT: int = 2
     AUTO_PUBLISH: bool = False          # v2에서 True로 변경
     DEDUP_CONFIDENCE_THRESHOLD: float = 0.75  # DeepSeek 중복 판정 confidence 임계값
+    MIN_QUALITY_SCORE: int = 75         # 0이면 품질 게이트 무시
 
     # 경로
     BASE_DIR: Path = Path("/app")
@@ -82,6 +83,8 @@ class Config:
         self.DEDUP_CONFIDENCE_THRESHOLD = float(
             os.getenv("DEDUP_CONFIDENCE_THRESHOLD", "0.75")
         )
+        # 0으로 설정하면 품질 게이트 무시하고 무조건 발행
+        self.MIN_QUALITY_SCORE = int(os.getenv("MIN_QUALITY_SCORE", "75"))
 
         base = Path(os.getenv("BASE_DIR", "/app"))
         self.BASE_DIR = base
