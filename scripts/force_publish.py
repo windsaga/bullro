@@ -40,7 +40,10 @@ if os.environ.get("BASE_DIR", "/app") == "/app":
 
 from pipeline.config import cfg
 from pipeline.publisher import publish_to_wordpress, PublishResult
-from pipeline.models import Post, Draft, SEOMeta, FactCheckResult, SynthesizedFacts, SelectedTopic, Article
+from pipeline.models import (
+    Post, Draft, SEOMeta, FactCheckResult,
+    SynthesizedFacts, SelectedTopic, ScoredArticle, Article,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger(__name__)
@@ -68,7 +71,7 @@ def _parse_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def _build_post_from_md(md_path: Path) -> Post:
-    """Markdown 파일 → Post 객체."""
+    """Markdown 파일 → Post 객체 (publisher.py가 필요한 필드만 채움)."""
     raw = md_path.read_text(encoding="utf-8")
     meta, body = _parse_frontmatter(raw)
 
@@ -76,7 +79,7 @@ def _build_post_from_md(md_path: Path) -> Post:
     slug = meta.get("slug", re.sub(r"[^a-z0-9-]", "", title.lower().replace(" ", "-"))[:60])
     thumbnail_url = meta.get("thumbnail", "") or ""
 
-    # tags: "['AI', 'LLM']" 형태 파싱
+    # tags: "['AI', 'LLM']" 또는 "AI, LLM" 형태 파싱
     tags_raw = meta.get("tags", "")
     tags: list[str] = []
     if tags_raw:
@@ -84,10 +87,23 @@ def _build_post_from_md(md_path: Path) -> Post:
 
     meta_description = meta.get("meta_description", "")
 
-    # 최소한의 더미 객체로 Post 조립
-    dummy_article = Article(url=meta.get("source_url", ""), title=title, content="", source="manual")
-    dummy_topic = SelectedTopic(article=dummy_article, angle=meta.get("angle", ""), rationale="", score=0)
-    dummy_facts = SynthesizedFacts(topic=dummy_topic, claims=[], data_points=[], mechanism="", limitations=[])
+    # 더미 객체 계층 구성 (publisher.py는 post.draft.content 만 실제로 사용)
+    dummy_article = ScoredArticle(
+        url=meta.get("source_url", ""),
+        title=title,
+        content="",
+        source="manual",
+        published_at="",
+    )
+    dummy_topic = SelectedTopic(article=dummy_article, angle=meta.get("angle", ""))
+    dummy_facts = SynthesizedFacts(
+        topic=dummy_topic,
+        claims="",
+        data_points="",
+        mechanism="",
+        limitations="",
+        opinions="",
+    )
     draft = Draft(facts=dummy_facts, content=body, model="manual", version=1)
     seo = SEOMeta(
         title_candidates=[title],
@@ -96,7 +112,7 @@ def _build_post_from_md(md_path: Path) -> Post:
         thumbnail_prompt="",
         internal_link_slots=[],
     )
-    fact_check = FactCheckResult(claims=[], unsupported_count=0)
+    fact_check = FactCheckResult(draft=draft, claims=[], unsupported_count=0)
 
     return Post(
         draft=draft,
@@ -131,7 +147,6 @@ def main() -> None:
     if args.all:
         targets = sorted(cfg.POSTS_DIR.glob("*.md"))
         if not args.force:
-            # low_quality / pending 제외
             targets = [p for p in targets if "low_quality" not in p.name and "pending" not in p.name]
         log.info(f"대상 파일 {len(targets)}개")
     elif args.files:
