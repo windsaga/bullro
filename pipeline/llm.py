@@ -13,19 +13,32 @@ log = logging.getLogger(__name__)
 DEEPSEEK_MODEL = "deepseek-ai/deepseek-v4-pro"
 GLM_MODEL = "z-ai/glm-5.1"
 
-_client: OpenAI | None = None
+# DeepSeek: 분석/검증용 — 빠름, 120초면 충분
+# GLM-5.1:  thinking 활성화 — 응답에 300~600초 소요
+_client_fast: OpenAI | None = None   # DeepSeek용
+_client_slow: OpenAI | None = None   # GLM-5.1용
 
 
-def _get_client() -> OpenAI:
-    global _client
-    if _client is None:
-        _client = OpenAI(
-            base_url=cfg.NVIDIA_BASE_URL,
-            api_key=cfg.NVIDIA_API_KEY,
-            timeout=120.0,
-            max_retries=0,
-        )
-    return _client
+def _get_client(slow: bool = False) -> OpenAI:
+    global _client_fast, _client_slow
+    if slow:
+        if _client_slow is None:
+            _client_slow = OpenAI(
+                base_url=cfg.NVIDIA_BASE_URL,
+                api_key=cfg.NVIDIA_API_KEY,
+                timeout=600.0,   # GLM thinking: 최대 10분
+                max_retries=0,
+            )
+        return _client_slow
+    else:
+        if _client_fast is None:
+            _client_fast = OpenAI(
+                base_url=cfg.NVIDIA_BASE_URL,
+                api_key=cfg.NVIDIA_API_KEY,
+                timeout=120.0,   # DeepSeek: 2분이면 충분
+                max_retries=0,
+            )
+        return _client_fast
 
 
 def _call_with_retry(fn, retries: int = 3, backoff: float = 10.0):
@@ -47,7 +60,7 @@ def deepseek(
     temperature: float = 0.3,
 ) -> str:
     """분석·분류·검증용. thinking 비활성화로 속도 우선."""
-    client = _get_client()
+    client = _get_client(slow=False)
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
@@ -76,7 +89,7 @@ def glm(
     temperature: float = 0.7,
 ) -> str:
     """창작·작문용. thinking 활성화 + 스트리밍."""
-    client = _get_client()
+    client = _get_client(slow=True)
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
