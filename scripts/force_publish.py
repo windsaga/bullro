@@ -14,12 +14,26 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import re
 import sys
 from pathlib import Path
 
 # 프로젝트 루트를 path에 추가
-sys.path.insert(0, str(Path(__file__).parent.parent))
+ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(ROOT))
+
+# .env 로드 (pipeline.config 임포트 전에 실행해야 함)
+_env_path = ROOT / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if _line and not _line.startswith("#") and "=" in _line:
+            _k, _, _v = _line.partition("=")
+            os.environ.setdefault(_k.strip(), _v.strip())
+
+# force_publish는 NVIDIA API 불필요 — 미설정 시 더미값으로 config 통과
+os.environ.setdefault("NVIDIA_API_KEY", "dummy-not-used")
 
 from pipeline.config import cfg
 from pipeline.publisher import publish_to_wordpress, PublishResult
