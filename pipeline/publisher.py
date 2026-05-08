@@ -8,6 +8,7 @@ import urllib.request
 import urllib.error
 from dataclasses import dataclass
 
+import markdown as md
 import requests
 
 from pipeline.config import cfg
@@ -37,27 +38,36 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
         f"{cfg.WORDPRESS_USERNAME}:{cfg.WORDPRESS_APP_PASSWORD}".encode()
     ).decode()
 
-    # 본문에서 frontmatter 제거
-    body = _strip_frontmatter(post.draft.content)
+    # Markdown → HTML 변환
+    raw_md = _strip_frontmatter(post.draft.content)
+    html_body = _md_to_html(raw_md)
+
+    # 태그 이름 → WordPress 태그 ID 변환
+    tag_ids = _resolve_tag_ids(post.seo.tags[:10], cred)
 
     payload: dict = {
         "title": post.chosen_title,
-        "content": body,
+        "content": html_body,
         "status": "future" if schedule_date else "publish",
         "slug": post.slug,
         "categories": [cfg.WORDPRESS_DEFAULT_CATEGORY_ID],
-        "tags": post.seo.tags[:10],
+        "tags": tag_ids,
         "excerpt": post.seo.meta_description,
     }
     if schedule_date:
         payload["date"] = schedule_date
+
+    # 썸네일 업로드
     if post.thumbnail_url:
         media_id = _upload_thumbnail(post.thumbnail_url, cred, post.chosen_title)
         if media_id:
             payload["featured_media"] = media_id
         else:
             # 업로드 실패 시 본문 상단 이미지 태그로 대체
-            payload["content"] = f'<img src="{post.thumbnail_url}" alt="{post.chosen_title}" />\n\n' + body
+            payload["content"] = (
+                f'<img src="{post.thumbnail_url}" alt="{post.chosen_title}" />\n\n'
+                + html_body
+            )
 
     data = json.dumps(payload).encode("utf-8")
     endpoint = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/posts"
@@ -85,6 +95,69 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
         body_bytes = e.read()
         log.error(f"WordPress API 오류 {e.code}: {body_bytes.decode('utf-8', errors='replace')[:500]}")
         raise
+
+
+# ── Markdown → HTML ───────────────────────────────────────────────────────────
+
+
+def _md_to_html(content: str) -> str:
+    """Markdown을 WordPress용 HTML로 변환."""
+    return md.markdown(
+        content,
+        extensions=[
+            "fenced_code",   # ```python ... ``` 코드블록
+            "tables",        # Markdown 테이블
+            "toc",           # 목차 앵커
+            "nl2br",         # 줄바꿈 보존
+        ],
+    )
+
+
+# ── 태그 ID 변환 ──────────────────────────────────────────────────────────────
+
+
+def _resolve_tag_ids(tag_names: list[str], cred: str) -> list[int]:
+    """태그 이름 목록 → WordPress 태그 ID 목록. 없는 태그는 자동 생성."""
+    ids = []
+    for name in tag_names:
+        tag_id = _get_or_create_tag(name.strip(), cred)
+        if tag_id:
+            ids.append(tag_id)
+    return ids
+
+
+def _get_or_create_tag(name: str, cred: str) -> int | None:
+    """태그 검색 후 없으면 생성, ID 반환."""
+    if not name:
+        return None
+    headers = {
+        "Authorization": f"Basic {cred}",
+        "Content-Type": "application/json",
+    }
+    base = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/tags"
+
+    # 1. 검색
+    try:
+        resp = requests.get(base, params={"search": name, "per_page": 5}, headers=headers, timeout=10)
+        resp.raise_for_status()
+        for tag in resp.json():
+            if tag.get("name", "").lower() == name.lower():
+                return tag["id"]
+    except Exception as e:
+        log.debug(f"태그 검색 실패 [{name}]: {e}")
+        return None
+
+    # 2. 없으면 생성
+    try:
+        resp = requests.post(base, json={"name": name}, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.json().get("id")
+    except Exception as e:
+        log.warning(f"태그 생성 실패 [{name}]: {e}")
+        return None
+
+
+# ── 썸네일 업로드 ─────────────────────────────────────────────────────────────
 
 
 def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
@@ -117,6 +190,9 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
     except Exception as e:
         log.warning(f"썸네일 WordPress 업로드 실패 (본문 이미지 태그로 대체): {e}")
         return None
+
+
+# ── 유틸 ─────────────────────────────────────────────────────────────────────
 
 
 def _strip_frontmatter(content: str) -> str:
