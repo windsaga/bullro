@@ -395,6 +395,55 @@ PYEOF
 
 ---
 
+## Phase 7.5: Codex 대표이미지 생성
+
+WordPress 업로드 전에 Codex CLI로 블로그 대표이미지(썸네일)를 생성합니다.
+
+```bash
+ASSETS_DIR="$BLOG_WORKDIR/assets"
+mkdir -p "$ASSETS_DIR"
+THUMB_FILE="$ASSETS_DIR/${POST_DATE}-${POST_SLUG}-thumb.jpg"
+
+# Codex에게 이미지 생성 태스크 전달
+cat > /tmp/codex-image-task.md << CODEX_EOF
+# 이미지 생성 태스크
+
+다음 블로그 포스트의 대표 이미지(썸네일)를 생성해주세요.
+
+## 포스트 정보
+- 제목: {POST_TITLE}
+- 주제: {주제 한 줄 요약}
+- 앵글: {앵글}
+
+## 작업 절차
+1. 포스트 주제에 맞는 영문 이미지 프롬프트를 작성합니다 (DALL-E 기준, 1200x630px 와이드 썸네일).
+   - 기술 블로그 썸네일 스타일 (다크 배경, 청/녹색 accent, 코드/회로 모티프)
+   - 텍스트 오버레이 없음
+   - 포스트 주제를 시각화하는 요소 포함
+2. 내장 image_gen 도구로 이미지를 생성합니다.
+3. 생성된 이미지를 \`${THUMB_FILE}\` 에 1200x630 JPG로 저장합니다.
+4. 저장 완료 후 "IMAGE_SAVED: ${THUMB_FILE}" 를 출력합니다. 실패 시 "IMAGE_FAILED: <이유>" 출력.
+
+## 주의사항
+- 파일 저장 외 다른 작업(git, 배포 등)은 하지 마세요.
+CODEX_EOF
+
+cat /tmp/codex-image-task.md | codex exec --model gpt-5.5 - 2>&1
+CODEX_IMG_EXIT=$?
+rm -f /tmp/codex-image-task.md
+
+# 이미지 생성 확인
+if [ -f "$THUMB_FILE" ]; then
+    echo "대표이미지 생성 완료: $THUMB_FILE"
+    THUMBNAIL_LOCAL="$THUMB_FILE"
+else
+    echo "대표이미지 생성 실패 — 업로드 없이 진행"
+    THUMBNAIL_LOCAL=""
+fi
+```
+
+---
+
 ## Phase 8: WordPress 발행 게이트
 
 AskUserQuestion으로 확인합니다:
@@ -403,57 +452,117 @@ AskUserQuestion으로 확인합니다:
 블로그 포스트 최종고 완성.
 
 파일: {FINAL_FILE}
+대표이미지: {THUMBNAIL_LOCAL 또는 "생성 실패"}
 평가: Claude={CLAUDE_VERDICT} | Codex={CODEX_VERDICT} | Gemini={GEMINI_VERDICT}
 글자수: {word_count}자
 
-A) WordPress에 지금 업로드 (예약 발행)
+A) WordPress에 지금 업로드 (대표이미지 포함)
 B) 파일만 저장 (나중에 수동 업로드)
 C) 추가 수정 후 재리뷰 (최대 2라운드)
 ```
 
-A 선택 시 WordPress REST API 업로드 + Slack 알림:
+A 선택 시 WordPress REST API 업로드 + Rank Math SEO + Slack 알림:
 
 ```bash
-# WordPress REST API (Application Password 인증)
-python3 - <<'PYEOF'
-import os, json, base64, urllib.request
+source "$BLOG_WORKDIR/venv/bin/activate" 2>/dev/null || true
+export BASE_DIR="$BLOG_WORKDIR"
 
-wp_url = os.environ["WORDPRESS_URL"].rstrip("/")
+python3 - <<'PYEOF'
+import os, sys, json, base64, urllib.request
+sys.path.insert(0, os.environ.get("BLOG_WORKDIR", "."))
+
+from pipeline.publisher import (
+    _strip_frontmatter, _md_to_html, _resolve_tag_ids,
+    _upload_thumbnail, _update_rankmath_seo
+)
+from pipeline.config import cfg
+import markdown as md
+
+wp_url = cfg.WORDPRESS_URL.rstrip("/")
 cred = base64.b64encode(
-    f"{os.environ['WORDPRESS_USERNAME']}:{os.environ['WORDPRESS_APP_PASSWORD']}".encode()
+    f"{cfg.WORDPRESS_USERNAME}:{cfg.WORDPRESS_APP_PASSWORD}".encode()
 ).decode()
 
-with open(os.environ["FINAL_FILE"]) as f:
-    content = f.read()
-body = content.split("---", 2)[-1].strip()
+with open(os.environ["FINAL_FILE"], encoding="utf-8") as f:
+    raw = f.read()
 
-data = json.dumps({
-    "title":      os.environ.get("POST_TITLE", os.environ["POST_SLUG"]),
-    "content":    body,
-    "status":     "future",
-    "date":       os.environ.get("PUBLISH_DATE", ""),
-    "categories": [int(os.environ.get("WORDPRESS_DEFAULT_CATEGORY_ID", "1"))],
-}).encode()
+html_body = _md_to_html(_strip_frontmatter(raw))
 
+# 태그 처리
+tag_names = os.environ.get("POST_TAGS", "").split(",")
+tag_ids = _resolve_tag_ids([t.strip() for t in tag_names if t.strip()], cred)
+
+chosen_title = os.environ.get("POST_TITLE", os.environ["POST_SLUG"])
+slug = os.environ["POST_SLUG"]
+meta_description = os.environ.get("META_DESCRIPTION", "")
+focus_keyword = os.environ.get("FOCUS_KEYWORD", "")
+
+payload = {
+    "title": chosen_title,
+    "content": html_body,
+    "status": "publish",
+    "slug": slug,
+    "categories": [cfg.WORDPRESS_DEFAULT_CATEGORY_ID],
+    "tags": tag_ids,
+    "excerpt": meta_description,
+}
+
+# 대표이미지: 로컬 파일 → WordPress 미디어 업로드
+thumb_local = os.environ.get("THUMBNAIL_LOCAL", "")
+if thumb_local and os.path.exists(thumb_local):
+    with open(thumb_local, "rb") as f:
+        img_bytes = f.read()
+    media_endpoint = f"{wp_url}/?rest_route=/wp/v2/media"
+    media_req = urllib.request.Request(
+        media_endpoint,
+        data=img_bytes,
+        headers={
+            "Authorization": f"Basic {cred}",
+            "Content-Type": "image/jpeg",
+            "Content-Disposition": f'attachment; filename="{os.path.basename(thumb_local)}"',
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(media_req, timeout=60) as r:
+        media = json.loads(r.read().decode())
+        media_id = media.get("id")
+        print(f"미디어 업로드: id={media_id}, url={media.get('source_url')}")
+    if media_id:
+        payload["featured_media"] = media_id
+
+data = json.dumps(payload).encode("utf-8")
+endpoint = f"{wp_url}/?rest_route=/wp/v2/posts"
 req = urllib.request.Request(
-    f"{wp_url}/wp-json/wp/v2/posts",
-    data=data,
+    endpoint, data=data,
     headers={"Authorization": f"Basic {cred}", "Content-Type": "application/json"},
     method="POST",
 )
-with urllib.request.urlopen(req) as resp:
-    result = json.loads(resp.read())
+with urllib.request.urlopen(req, timeout=30) as resp:
+    result = json.loads(resp.read().decode())
+    wp_id = result.get("id", 0)
     wp_link = result.get("link", "")
-    print(f"WordPress 업로드 완료: {wp_link}")
-    # Slack 알림
-    slack_payload = json.dumps({"text": f"✅ 블로그 포스트 업로드 완료\n{wp_link}"}).encode()
-    slack_req = urllib.request.Request(
-        os.environ["SLACK_WEBHOOK_URL"],
-        data=slack_payload,
-        headers={"Content-Type": "application/json"},
+    print(f"WordPress 발행 완료: {wp_link} (id={wp_id})")
+
+# Rank Math SEO
+if wp_id and (focus_keyword or meta_description):
+    _update_rankmath_seo(
+        wp_id=wp_id, cred=cred,
+        focus_keyword=focus_keyword,
+        seo_title=chosen_title,
+        meta_description=meta_description,
     )
-    urllib.request.urlopen(slack_req)
-    print("Slack 알림 전송 완료")
+
+# Slack 알림
+slack_payload = json.dumps({
+    "text": f"✅ 블로그 포스트 업로드 완료\n*{chosen_title}*\n{wp_link}\n리뷰어: Claude Code × Codex × Gemini"
+}).encode()
+slack_req = urllib.request.Request(
+    os.environ["SLACK_WEBHOOK_URL"],
+    data=slack_payload,
+    headers={"Content-Type": "application/json"},
+)
+urllib.request.urlopen(slack_req)
+print("Slack 알림 전송 완료")
 PYEOF
 ```
 

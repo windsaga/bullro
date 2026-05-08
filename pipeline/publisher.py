@@ -210,7 +210,7 @@ def _get_or_create_tag(name: str, cred: str) -> int | None:
 def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
     """썸네일을 WordPress Media API로 업로드하고 media ID 반환. 실패 시 None."""
     try:
-        img_resp = requests.get(thumbnail_url, timeout=30)
+        img_resp = requests.get(thumbnail_url, timeout=90)
         img_resp.raise_for_status()
         img_bytes = img_resp.content
         content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()

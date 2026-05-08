@@ -22,14 +22,14 @@ def generate_thumbnail(prompt: str, width: int = 1200, height: int = 630) -> str
     url = f"https://image.pollinations.ai/prompt/{encoded}?width={width}&height={height}&model=flux&nologo=true"
 
     try:
-        # HEAD 요청으로 이미지 존재 확인 (실제 다운로드 불필요 — URL 자체가 동적 생성)
-        resp = requests.head(url, timeout=30, allow_redirects=True)
-        if resp.status_code < 400:
-            log.info(f"썸네일 URL 생성 완료")
+        # GET으로 실제 이미지 생성 트리거 (FLUX 생성에 최대 90초 소요)
+        resp = requests.get(url, timeout=90, allow_redirects=True)
+        if resp.status_code == 200 and resp.content:
+            log.info(f"썸네일 이미지 생성 완료 ({len(resp.content):,} bytes)")
             return url
         else:
             log.warning(f"Pollinations 응답 {resp.status_code}")
-            return url  # URL은 반환 (비동기 생성이라 200이 아닐 수 있음)
+            return url
     except Exception as e:
         log.warning(f"썸네일 생성 실패: {e}")
         return None
