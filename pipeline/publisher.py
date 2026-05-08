@@ -8,6 +8,8 @@ import urllib.request
 import urllib.error
 from dataclasses import dataclass
 
+import requests
+
 from pipeline.config import cfg
 from pipeline.models import Post
 
@@ -50,9 +52,12 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
     if schedule_date:
         payload["date"] = schedule_date
     if post.thumbnail_url:
-        # 썸네일은 Featured Image — WordPress는 먼저 media 업로드 후 featured_media ID 필요
-        # v1에서는 본문 상단에 이미지 태그 삽입으로 대체
-        payload["content"] = f'<img src="{post.thumbnail_url}" alt="{post.chosen_title}" />\n\n' + body
+        media_id = _upload_thumbnail(post.thumbnail_url, cred, post.chosen_title)
+        if media_id:
+            payload["featured_media"] = media_id
+        else:
+            # 업로드 실패 시 본문 상단 이미지 태그로 대체
+            payload["content"] = f'<img src="{post.thumbnail_url}" alt="{post.chosen_title}" />\n\n' + body
 
     data = json.dumps(payload).encode("utf-8")
     endpoint = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/posts"
@@ -80,6 +85,38 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
         body_bytes = e.read()
         log.error(f"WordPress API 오류 {e.code}: {body_bytes.decode('utf-8', errors='replace')[:500]}")
         raise
+
+
+def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
+    """썸네일을 WordPress Media API로 업로드하고 media ID 반환. 실패 시 None."""
+    try:
+        img_resp = requests.get(thumbnail_url, timeout=30)
+        img_resp.raise_for_status()
+        img_bytes = img_resp.content
+        content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
+
+        safe_title = "".join(c if c.isalnum() or c in "-_ " else "" for c in title[:40])
+        filename = f"{safe_title}.jpg"
+        endpoint = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/media"
+
+        req = urllib.request.Request(
+            endpoint,
+            data=img_bytes,
+            headers={
+                "Authorization": f"Basic {cred}",
+                "Content-Type": content_type,
+                "Content-Disposition": f'attachment; filename="{filename}"',
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            media_id = result.get("id")
+            log.info(f"썸네일 업로드 완료: media_id={media_id}")
+            return media_id
+    except Exception as e:
+        log.warning(f"썸네일 WordPress 업로드 실패 (본문 이미지 태그로 대체): {e}")
+        return None
 
 
 def _strip_frontmatter(content: str) -> str:

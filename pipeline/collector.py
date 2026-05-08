@@ -119,8 +119,21 @@ def _collect_official_blogs() -> list[Article]:
     return articles
 
 
+def _load_stars_cache() -> dict[str, int]:
+    cache_path = cfg.DATA_DIR / "github_stars_cache.json"
+    try:
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _save_stars_cache(cache: dict[str, int]) -> None:
+    cache_path = cfg.DATA_DIR / "github_stars_cache.json"
+    cache_path.write_text(json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def _collect_github() -> list[Article]:
-    """sources_watchlist.json의 GitHub 저장소 최근 릴리즈 수집."""
+    """sources_watchlist.json의 GitHub 저장소 최근 릴리즈 + star delta 수집."""
     watchlist_path = cfg.SOURCES_WATCHLIST
     if not watchlist_path.exists():
         return []
@@ -128,28 +141,52 @@ def _collect_github() -> list[Article]:
     if not repos:
         return []
 
-    articles = []
     headers = {"Authorization": f"token {cfg.GITHUB_TOKEN}", "User-Agent": "bullro-bot/1.0"}
+    stars_cache = _load_stars_cache()
+    new_cache: dict[str, int] = dict(stars_cache)
+
+    articles = []
     for repo in repos[:50]:
         try:
-            url = f"https://api.github.com/repos/{repo}/releases/latest"
-            resp = requests.get(url, headers=headers, timeout=10)
-            if resp.status_code != 200:
+            # repo 기본 정보 (star 수)
+            repo_resp = requests.get(
+                f"https://api.github.com/repos/{repo}", headers=headers, timeout=10
+            )
+            star_count = 0
+            if repo_resp.status_code == 200:
+                star_count = repo_resp.json().get("stargazers_count", 0)
+            new_cache[repo] = star_count
+            # 처음 수집 시(캐시 없음) delta=0, 이후 실행부터 실제 증가분 반영
+            star_delta = max(0, star_count - stars_cache.get(repo, star_count))
+
+            # 최근 릴리즈 정보
+            rel_resp = requests.get(
+                f"https://api.github.com/repos/{repo}/releases/latest",
+                headers=headers,
+                timeout=10,
+            )
+            if rel_resp.status_code != 200:
+                time.sleep(0.3)
                 continue
-            data = resp.json()
+            data = rel_resp.json()
             if not data.get("tag_name"):
+                time.sleep(0.3)
                 continue
+
             articles.append(Article(
                 url=data.get("html_url", ""),
                 title=f"{repo} {data['tag_name']} 릴리즈",
                 content=data.get("body", "")[:2000],
                 source="github",
                 published_at=data.get("published_at", ""),
-                signals={"github_star_delta": 0},
+                signals={"github_star_delta": star_delta},
             ))
             time.sleep(0.3)
         except Exception as e:
             log.debug(f"GitHub 수집 실패 {repo}: {e}")
+
+    _save_stars_cache(new_cache)
+    log.info(f"GitHub star 캐시 갱신: {len(new_cache)}개 레포")
     return articles
 
 

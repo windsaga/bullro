@@ -148,6 +148,19 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
             status="ready",
         )
 
+        # 내부 링크 삽입
+        linked_content = _insert_internal_links(
+            post.draft.content,
+            seo.internal_link_slots,
+        )
+        if linked_content != post.draft.content:
+            post.draft = Draft(
+                facts=post.draft.facts,
+                content=linked_content,
+                model=post.draft.model,
+                version=post.draft.version,
+            )
+
         # 파일 저장
         file_path = _save_final_file(post, run_date)
         post.file_path = str(file_path)
@@ -291,6 +304,44 @@ def _make_slug(title: str) -> str:
     slug = re.sub(r"[\s_]+", "-", slug)
     slug = re.sub(r"-+", "-", slug).strip("-")
     return slug[:60] or "post"
+
+
+def _insert_internal_links(content: str, link_slots: list[str]) -> str:
+    """P7의 internal_link_slots 키워드로 posts.json 이력을 검색해 관련 포스트 섹션 추가."""
+    if not link_slots:
+        return content
+    try:
+        posts = json.loads(cfg.POSTS_JSON.read_text(encoding="utf-8"))
+    except Exception:
+        return content
+
+    published = [p for p in posts if p.get("wp_link") and p.get("status") in ("published", "ready")]
+    if not published:
+        return content
+
+    matched: list[tuple[str, str]] = []
+    seen_links: set[str] = set()
+    for slot in link_slots:
+        slot_lower = slot.lower()
+        for post in published:
+            wp_link = post.get("wp_link", "")
+            if wp_link in seen_links:
+                continue
+            tags_text = " ".join(post.get("tags", [])).lower()
+            title_text = post.get("title", "").lower()
+            if slot_lower in tags_text or slot_lower in title_text:
+                matched.append((post["title"], wp_link))
+                seen_links.add(wp_link)
+                break
+
+    if not matched:
+        return content
+
+    link_section = "\n\n---\n\n## 관련 포스트\n\n"
+    for title, url in matched[:5]:
+        link_section += f"- [{title}]({url})\n"
+
+    return content + link_section
 
 
 def _tag_unsupported_claims(draft: Draft, fact_check: FactCheckResult) -> Draft:
