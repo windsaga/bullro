@@ -34,6 +34,8 @@ if _env_path.exists():
 
 # force_publish는 NVIDIA API 불필요 — 미설정 시 더미값으로 config 통과
 os.environ.setdefault("NVIDIA_API_KEY", "dummy-not-used")
+# BASE_DIR 미설정 시 프로젝트 루트로 fallback (/app 권한 오류 방지)
+os.environ.setdefault("BASE_DIR", str(ROOT))
 
 from pipeline.config import cfg
 from pipeline.publisher import publish_to_wordpress, PublishResult
