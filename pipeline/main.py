@@ -141,7 +141,8 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
 
         # 포스트 조립
         chosen_title = seo.title_candidates[0] if seo.title_candidates else topic.article.title
-        slug = _make_slug(chosen_title)
+        # URL 슬러그: P7이 생성한 영문 포커스 키워드 슬러그 우선, 없으면 제목에서 생성
+        slug = seo.focus_keyword_slug or _make_slug(chosen_title)
         post = Post(
             draft=draft_v2,
             fact_check=fact_check,
@@ -151,6 +152,10 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
             slug=slug,
             status="ready",
         )
+
+        # 포커스 키워드 본문 도달 여부 검사 (Yoast SEO rule 4, 5)
+        if seo.focus_keyword:
+            _check_focus_keyword(draft_v2.content, seo.focus_keyword, title_short)
 
         # 내부 링크 삽입
         linked_content = _insert_internal_links(
@@ -346,6 +351,19 @@ def _insert_internal_links(content: str, link_slots: list[str]) -> str:
         link_section += f"- [{title}]({url})\n"
 
     return content + link_section
+
+
+def _check_focus_keyword(content: str, focus_keyword: str, label: str) -> None:
+    """Yoast SEO 포커스 키워드 체크:
+    - rule 4: 본문 시작 300자 이내 포함 여부
+    - rule 5: 본문 전체 포함 여부
+    문제가 있으면 경고 로그만 기록 (자동 수정 없음 — LLM 품질 문제로 판단).
+    """
+    intro = content[:300]
+    if focus_keyword not in intro:
+        log.warning(f"[{label}] SEO: 포커스 키워드 '{focus_keyword}'가 본문 시작 300자에 없음")
+    if focus_keyword not in content:
+        log.warning(f"[{label}] SEO: 포커스 키워드 '{focus_keyword}'가 본문 전체에 없음")
 
 
 def _tag_unsupported_claims(draft: Draft, fact_check: FactCheckResult) -> Draft:

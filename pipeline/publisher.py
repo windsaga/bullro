@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import urllib.request
 import urllib.error
 from dataclasses import dataclass
@@ -85,9 +86,21 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode("utf-8"))
+            wp_id = result.get("id", 0)
             log.info(f"WordPress 발행 완료: {result.get('link')}")
+
+            # Rank Math SEO 메타 업데이트 (포커스 키워드, SEO 제목, 메타 설명)
+            if wp_id and (post.seo.focus_keyword or post.seo.meta_description):
+                _update_rankmath_seo(
+                    wp_id=wp_id,
+                    cred=cred,
+                    focus_keyword=post.seo.focus_keyword,
+                    seo_title=post.chosen_title,
+                    meta_description=post.seo.meta_description,
+                )
+
             return PublishResult(
-                wp_id=result.get("id", 0),
+                wp_id=wp_id,
                 link=result.get("link", ""),
                 status=result.get("status", ""),
             )
@@ -100,15 +113,49 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
 # ── Markdown → HTML ───────────────────────────────────────────────────────────
 
 
+def _clean_llm_markdown(text: str) -> str:
+    """GLM 스트리밍 아티팩트 제거.
+
+    GLM-5.1이 출력하는 두 가지 패턴을 정리:
+    1. 줄 시작 > (이전 비어있지 않은 줄의 연속으로 보이는 블록인용 아티팩트)
+       예: "VRAM 용\\n>량별" → "VRAM 용량별"
+    2. 한국어 단어 사이에 남아있는 > 문자
+       예: "고려>하는" → "고려하는"
+
+    코드블록 내부는 손대지 않음.
+    """
+    lines = text.split('\n')
+    out: list[str] = []
+    in_code = False
+
+    for line in lines:
+        if line.strip().startswith('```'):
+            in_code = not in_code
+
+        if not in_code and line.startswith('>') and out and out[-1].strip():
+            continuation = line[1:]
+            sep = '' if not continuation or continuation[0].isspace() else ' '
+            out[-1] = out[-1].rstrip() + sep + continuation
+        else:
+            out.append(line)
+
+    joined = '\n'.join(out)
+    # 한국어 글자 사이 > 제거 (예: 고려>하는 → 고려하는)
+    joined = re.sub(r'([가-힣])\s*>\s*([가-힣])', r'\1\2', joined)
+    return joined
+
+
 def _md_to_html(content: str) -> str:
     """Markdown을 WordPress용 HTML로 변환."""
+    cleaned = _clean_llm_markdown(content)
     return md.markdown(
-        content,
+        cleaned,
         extensions=[
             "fenced_code",   # ```python ... ``` 코드블록
             "tables",        # Markdown 테이블
             "toc",           # 목차 앵커
-            "nl2br",         # 줄바꿈 보존
+            # nl2br 제거: LLM이 출력한 단일 \n을 <br>로 변환하면
+            # 줄바꿈된 단어가 분리되는 문제 발생
         ],
     )
 
@@ -190,6 +237,58 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
     except Exception as e:
         log.warning(f"썸네일 WordPress 업로드 실패 (본문 이미지 태그로 대체): {e}")
         return None
+
+
+# ── Rank Math SEO ─────────────────────────────────────────────────────────────
+
+
+def _update_rankmath_seo(
+    wp_id: int,
+    cred: str,
+    focus_keyword: str,
+    seo_title: str,
+    meta_description: str,
+) -> None:
+    """Rank Math REST API로 포스트 SEO 메타 업데이트.
+
+    설정되는 필드:
+    - rank_math_focus_keyword : Rank Math 포커스 키워드
+    - rank_math_title         : Rank Math SEO 제목 (검색 결과 표시용)
+    - rank_math_description   : Rank Math 메타 설명 (검색 결과 스니펫)
+    """
+    endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/rankmath/v1/updateMeta"
+    meta: dict = {}
+    if focus_keyword:
+        meta["rank_math_focus_keyword"] = focus_keyword
+    if seo_title:
+        meta["rank_math_title"] = seo_title
+    if meta_description:
+        meta["rank_math_description"] = meta_description
+
+    payload = json.dumps({
+        "objectType": "post",
+        "objectID": wp_id,
+        "meta": meta,
+    }).encode("utf-8")
+
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={
+            "Authorization": f"Basic {cred}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+            if body.get("success"):
+                log.info(f"Rank Math SEO 메타 업데이트 완료 (post_id={wp_id}, keyword='{focus_keyword}')")
+            else:
+                log.warning(f"Rank Math SEO 업데이트 응답 이상: {body}")
+    except Exception as e:
+        log.warning(f"Rank Math SEO 업데이트 실패 (발행은 완료): {e}")
 
 
 # ── 유틸 ─────────────────────────────────────────────────────────────────────

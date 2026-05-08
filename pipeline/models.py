@@ -71,6 +71,8 @@ class SEOMeta:
     tags: list[str] = field(default_factory=list)
     thumbnail_prompt: str = ""
     internal_link_slots: list[str] = field(default_factory=list)
+    focus_keyword: str = ""          # 한국어 포커스 키워드 (예: "로컬 LLM 추천 2026")
+    focus_keyword_slug: str = ""     # URL용 영문 슬러그 (예: "local-llm-comparison-2026")
 
 
 @dataclass
