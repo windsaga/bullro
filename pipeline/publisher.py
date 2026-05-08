@@ -70,7 +70,7 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
             )
 
     data = json.dumps(payload).encode("utf-8")
-    endpoint = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/posts"
+    endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/posts"
 
     req = urllib.request.Request(
         endpoint,
@@ -134,7 +134,7 @@ def _get_or_create_tag(name: str, cred: str) -> int | None:
         "Authorization": f"Basic {cred}",
         "Content-Type": "application/json",
     }
-    base = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/tags"
+    base = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/tags"
 
     # 1. 검색
     try:
@@ -170,7 +170,7 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
 
         safe_title = "".join(c if c.isalnum() or c in "-_ " else "" for c in title[:40])
         filename = f"{safe_title}.jpg"
-        endpoint = f"{cfg.WORDPRESS_URL}/wp-json/wp/v2/media"
+        endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/media"
 
         req = urllib.request.Request(
             endpoint,
