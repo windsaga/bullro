@@ -72,7 +72,8 @@ def run_pipeline() -> None:
     log.info(f"top20 확정: {[a.title[:30] for a in top20[:3]]} ...")
 
     # ── STAGE 3: P1 트리아지 ──────────────────────────────────────
-    selected_topics = p1_triage(top20, top_k=cfg.DAILY_POST_COUNT)
+    daily_count = min(cfg.DAILY_POST_COUNT, 3)  # 하드캡: 최대 3개/일
+    selected_topics = p1_triage(top20, top_k=daily_count)
     if not selected_topics:
         log.warning("P1 선별 결과 없음 — 종료")
         return
