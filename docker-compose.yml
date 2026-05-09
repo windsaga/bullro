@@ -3,8 +3,8 @@ services:
     build: .
     container_name: ai-blog-pipeline
     env_file: .env
-    # ofelia가 job-exec으로 이 컨테이너 안에서 파이프라인을 실행하므로
-    # 컨테이너는 항상 대기 상태로 유지 (CMD를 덮어씀)
+    environment:
+      - TZ=Asia/Seoul
     command: ["tail", "-f", "/dev/null"]
     volumes:
       - ./data:/app/data
@@ -17,6 +17,8 @@ services:
   scheduler:
     image: mcuadros/ofelia:latest
     container_name: blog-scheduler
+    environment:
+      - TZ=Asia/Seoul
     depends_on:
       - pipeline
     volumes:
