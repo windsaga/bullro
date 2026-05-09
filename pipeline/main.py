@@ -26,7 +26,7 @@ from pipeline.models import (
     SynthesizedFacts,
 )
 from pipeline.notifier import notify_slack
-from pipeline.publisher import publish_to_wordpress
+from pipeline.publisher import publish_to_wordpress, verify_and_repair_published_post
 from pipeline.scorer import score_and_deduplicate
 from pipeline.stages.p1_triage import p1_triage
 from pipeline.stages.p2_synthesis import p2_synthesis
@@ -176,9 +176,14 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
 
         # 발행 결정
         if cfg.AUTO_PUBLISH:
+            import base64
+            cred = base64.b64encode(
+                f"{cfg.WORDPRESS_USERNAME}:{cfg.WORDPRESS_APP_PASSWORD}".encode()
+            ).decode()
             result = publish_to_wordpress(post)
             post.wp_link = result.link
             post.status = "published"
+            verify_and_repair_published_post(result.wp_id, cred)
             notify_slack(event="published", post=post, wp_link=result.link)
             log.info(f"[{title_short}] 자동 발행 완료: {result.link}")
         else:

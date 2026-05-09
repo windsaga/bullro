@@ -26,7 +26,10 @@ class Config:
     WORDPRESS_URL: str = ""
     WORDPRESS_USERNAME: str = ""
     WORDPRESS_APP_PASSWORD: str = ""
-    WORDPRESS_DEFAULT_CATEGORY_ID: int = 1
+    WORDPRESS_DEFAULT_CATEGORY_ID: int = 61
+    WORDPRESS_CATEGORY_AI_ML: int = 61
+    WORDPRESS_CATEGORY_DEV_TOOLS: int = 62
+    WORDPRESS_CATEGORY_PAPER_REVIEW: int = 63
 
     # Slack
     SLACK_WEBHOOK_URL: str = ""
@@ -66,8 +69,11 @@ class Config:
         self.WORDPRESS_USERNAME = os.getenv("WORDPRESS_USERNAME", "")
         self.WORDPRESS_APP_PASSWORD = os.getenv("WORDPRESS_APP_PASSWORD", "")
         self.WORDPRESS_DEFAULT_CATEGORY_ID = int(
-            os.getenv("WORDPRESS_DEFAULT_CATEGORY_ID", "1")
+            os.getenv("WORDPRESS_DEFAULT_CATEGORY_ID", "61")
         )
+        self.WORDPRESS_CATEGORY_AI_ML = int(os.getenv("WORDPRESS_CATEGORY_AI_ML", "61"))
+        self.WORDPRESS_CATEGORY_DEV_TOOLS = int(os.getenv("WORDPRESS_CATEGORY_DEV_TOOLS", "62"))
+        self.WORDPRESS_CATEGORY_PAPER_REVIEW = int(os.getenv("WORDPRESS_CATEGORY_PAPER_REVIEW", "63"))
 
         self.SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
         self.SLACK_CHANNEL = os.getenv("SLACK_CHANNEL", "#blog-review")
