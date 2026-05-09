@@ -45,7 +45,7 @@ def _build_payload(event: str, **kwargs) -> dict:
     elif event == "published":
         return _payload_published(kwargs["post"], kwargs.get("wp_link", ""))
     elif event == "share_ready":
-        return _payload_share_ready(kwargs["post"], kwargs.get("ko_community_text", ""))
+        return _payload_share_ready(kwargs["post"], kwargs.get("twitter_text", ""))
     elif event == "low_quality":
         return _payload_low_quality(kwargs["topic"], kwargs["critique"])
     elif event == "pending":
@@ -113,28 +113,28 @@ def _payload_published(post: Post, wp_link: str) -> dict:
     }
 
 
-def _payload_share_ready(post: Post, ko_community_text: str) -> dict:
+def _payload_share_ready(post: Post, twitter_text: str) -> dict:
     title = post.chosen_title or "(제목 없음)"
-    text_block = ko_community_text[:800] if ko_community_text else "공유 콘텐츠 생성 실패"
+    text_block = twitter_text[:280] if twitter_text else "X 공유문 생성 실패"
     return {
-        "text": f"📢 공유 콘텐츠 준비됨: {title}",
+        "text": f"🐦 X 공유문 준비됨: {title}",
         "blocks": [
             {
                 "type": "header",
-                "text": {"type": "plain_text", "text": "📢 커뮤니티 공유 콘텐츠 준비됨"},
+                "text": {"type": "plain_text", "text": "🐦 X 공유문 준비됨"},
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*포스트:* <{post.wp_link}|{title}>\n*공유 파일:* `posts/share/`",
+                    "text": f"*포스트:* <{post.wp_link}|{title}>",
                 },
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"*국내 커뮤니티용:*\n```{text_block}```",
+                    "text": f"*X 공유문:*\n```{text_block}```",
                 },
             },
         ],
