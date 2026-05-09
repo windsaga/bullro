@@ -32,13 +32,13 @@ def p5_revise(draft_v1: Draft, critique: Critique) -> Draft:
     weaknesses_text = "\n".join(f"  {i+1}. {w}" for i, w in enumerate(critique.weaknesses))
 
     prompt = PROMPT_TMPL.format(
-        draft=draft_v1.content[:4000],
+        draft=draft_v1.content[:8000],
         total=critique.total,
         weaknesses=weaknesses_text,
         improvement_guide=critique.improvement_guide,
     )
 
-    content = glm(prompt, system=SYSTEM, max_tokens=4096, temperature=0.5)
+    content = glm(prompt, system=SYSTEM, max_tokens=8192, temperature=0.5)
     log.info(f"P5 수정본 생성 완료 ({len(content)}자)")
 
     return Draft(

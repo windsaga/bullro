@@ -28,6 +28,7 @@ from pipeline.models import (
 from pipeline.notifier import notify_slack
 from pipeline.publisher import publish_to_wordpress, verify_and_repair_published_post
 from pipeline.scorer import score_and_deduplicate
+from pipeline.stages.draft_guard import ensure_complete
 from pipeline.stages.p1_triage import p1_triage
 from pipeline.stages.p2_synthesis import p2_synthesis
 from pipeline.stages.p3_draft import p3_draft
@@ -96,6 +97,15 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
 
         # P3: 초안 v1 (GLM-5.1)
         draft_v1 = p3_draft(facts, angle=topic.angle)
+        # 잘림 검사: 완결되지 않으면 GLM으로 결론 보완
+        completed_content = ensure_complete(draft_v1.content, topic.article.title)
+        if completed_content != draft_v1.content:
+            draft_v1 = Draft(
+                facts=draft_v1.facts,
+                content=completed_content,
+                model=draft_v1.model,
+                version=draft_v1.version,
+            )
 
         # P4: 자체 비평 (DeepSeek)
         critique = p4_critique(draft_v1, facts)
@@ -126,6 +136,15 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
 
         # P5: 수정본 v2 (GLM-5.1)
         draft_v2 = p5_revise(draft_v1, critique)
+        # 잘림 검사: P5 수정본도 완결 보장
+        completed_v2 = ensure_complete(draft_v2.content, topic.article.title)
+        if completed_v2 != draft_v2.content:
+            draft_v2 = Draft(
+                facts=draft_v2.facts,
+                content=completed_v2,
+                model=draft_v2.model,
+                version=draft_v2.version,
+            )
 
         # P6: 팩트체크 (DeepSeek)
         fact_check = p6_factcheck(draft_v2, facts)

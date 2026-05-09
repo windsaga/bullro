@@ -62,7 +62,7 @@ def p3_draft(
         facts=facts_text,
     )
 
-    content = glm(prompt, system=SYSTEM, max_tokens=4096, temperature=0.7)
+    content = glm(prompt, system=SYSTEM, max_tokens=8192, temperature=0.7)
     log.info(f"P3 초안 생성 완료 ({len(content)}자, 앵글={angle})")
 
     return Draft(facts=facts, content=content, model="GLM-5.1", version=1)

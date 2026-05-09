@@ -53,7 +53,7 @@ def p4_critique(draft: Draft, facts: SynthesizedFacts) -> Critique:
     facts_summary = _summarize_facts(facts)
     prompt = PROMPT_TMPL.format(
         facts=facts_summary,
-        draft=draft.content[:4000],
+        draft=draft.content[:8000],
     )
 
     raw = deepseek(prompt, system=SYSTEM, max_tokens=1024, temperature=0.1)

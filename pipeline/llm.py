@@ -197,7 +197,7 @@ def deepseek(
 def glm(
     prompt: str,
     system: str = "",
-    max_tokens: int = 4096,
+    max_tokens: int = 8192,
     temperature: float = 0.7,
 ) -> str:
     """창작·작문용. thinking 활성화 + 스트리밍.
