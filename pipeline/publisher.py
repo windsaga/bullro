@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import re
@@ -60,17 +61,11 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
     if schedule_date:
         payload["date"] = schedule_date
 
-    # 썸네일 업로드
+    # 썸네일 업로드 (실패 시 본문 삽입 없이 로그만 남김 — 이미지 중복 방지)
     if post.thumbnail_url:
         media_id = _upload_thumbnail(post.thumbnail_url, cred, post.chosen_title)
         if media_id:
             payload["featured_media"] = media_id
-        else:
-            # 업로드 실패 시 본문 상단 이미지 태그로 대체
-            payload["content"] = (
-                f'<img src="{post.thumbnail_url}" alt="{post.chosen_title}" />\n\n'
-                + html_body
-            )
 
     data = json.dumps(payload).encode("utf-8")
     endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/posts"
@@ -291,6 +286,7 @@ def _verify_html_structure(html: str) -> str:
         if result:
             heading, body = result
             body = re.sub(r'\s*---\s*$', '', body).strip()
+            attrs = "" if len(attrs) > 120 else attrs
             log.info(f"[HTML 수정] '{heading[:50]}' | {len(body)}자 본문 분리")
             return f'<h2{attrs}>{heading}</h2>\n<p>{body}</p>'
 
@@ -389,8 +385,7 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
         img_bytes = img_resp.content
         content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
 
-        safe_title = "".join(c if c.isalnum() or c in "-_ " else "" for c in title[:40])
-        filename = f"{safe_title}.jpg"
+        filename = _safe_media_filename(title, content_type)
         endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/media"
 
         req = urllib.request.Request(
@@ -411,6 +406,28 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
     except Exception as e:
         log.warning(f"썸네일 WordPress 업로드 실패 (본문 이미지 태그로 대체): {e}")
         return None
+
+
+def _safe_media_filename(title: str, content_type: str) -> str:
+    """HTTP 헤더에 안전한 ASCII 미디어 파일명 생성."""
+    stem = title.lower()
+    stem = re.sub(r"[^a-z0-9\s_-]", "", stem)
+    stem = re.sub(r"[\s_]+", "-", stem).strip("-")
+    if not stem:
+        digest = hashlib.sha1(title.encode("utf-8")).hexdigest()[:10]
+        stem = f"thumbnail-{digest}"
+    else:
+        stem = stem[:48].strip("-") or "thumbnail"
+
+    ext_by_type = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+    }
+    ext = ext_by_type.get(content_type.lower(), "jpg")
+    return f"{stem}.{ext}"
 
 
 # ── Rank Math SEO ─────────────────────────────────────────────────────────────
