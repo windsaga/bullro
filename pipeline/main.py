@@ -206,6 +206,12 @@ def _process_topic(topic: SelectedTopic, run_date: str) -> Optional[Post]:
             verify_and_repair_published_post(result.wp_id, cred)
             notify_slack(event="published", post=post, wp_link=result.link)
             log.info(f"[{title_short}] 자동 발행 완료: {result.link}")
+
+            # P8: 공유 콘텐츠 생성 + 자동 투고 (AUTO_PUBLISH=true 시에만)
+            from pipeline.stages.p8_share import generate_share_content
+            share_files = generate_share_content(post)
+            if share_files:
+                post.share_files = share_files
         else:
             notify_slack(event="ready", post=post, critique=critique)
             log.info(f"[{title_short}] Slack 알림 전송 완료 (수동 승인 대기)")

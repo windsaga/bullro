@@ -73,6 +73,7 @@ class SEOMeta:
     internal_link_slots: list[str] = field(default_factory=list)
     focus_keyword: str = ""          # 한국어 포커스 키워드 (예: "로컬 LLM 추천 2026")
     focus_keyword_slug: str = ""     # URL용 영문 슬러그 (예: "local-llm-comparison-2026")
+    series: Optional[str] = None     # 시리즈명 (예: "로컬 LLM 실험실") 또는 None
 
 
 @dataclass
@@ -86,3 +87,4 @@ class Post:
     status: str = "ready"   # "ready" | "pending_review" | "published" | "rejected"
     wp_link: str = ""
     file_path: str = ""
+    share_files: list[str] = field(default_factory=list)

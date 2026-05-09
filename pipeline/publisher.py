@@ -48,13 +48,17 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
     tag_ids = _resolve_tag_ids(post.seo.tags[:10], cred)
 
     category_id = _determine_category(post.chosen_title, post.seo.tags)
+    category_ids = [category_id]
+    series_cat = _series_category_id(post.seo.series)
+    if series_cat:
+        category_ids.append(series_cat)
 
     payload: dict = {
         "title": post.chosen_title,
         "content": html_body,
         "status": "future" if schedule_date else "publish",
         "slug": post.slug,
-        "categories": [category_id],
+        "categories": category_ids,
         "tags": tag_ids,
         "excerpt": post.seo.meta_description,
     }
@@ -508,6 +512,19 @@ def _determine_category(title: str, tags: list[str]) -> int:
     if any(k in text for k in tool_kw):
         return cfg.WORDPRESS_CATEGORY_DEV_TOOLS
     return cfg.WORDPRESS_CATEGORY_AI_ML
+
+
+def _series_category_id(series: str | None) -> int | None:
+    """시리즈명 → WordPress 카테고리 ID. 0이면 None 반환."""
+    mapping = {
+        "로컬 LLM 실험실": cfg.WORDPRESS_CATEGORY_LOCAL_LLM,
+        "AI 개발도구 워크플로우": cfg.WORDPRESS_CATEGORY_AI_DEVTOOLS,
+        "AI 블로그 자동화": cfg.WORDPRESS_CATEGORY_AI_AUTOMATION,
+    }
+    if not series:
+        return None
+    cat_id = mapping.get(series, 0)
+    return cat_id if cat_id > 0 else None
 
 
 def _strip_frontmatter(content: str) -> str:
