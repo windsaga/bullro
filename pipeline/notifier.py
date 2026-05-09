@@ -115,7 +115,7 @@ def _payload_published(post: Post, wp_link: str) -> dict:
 
 def _payload_share_ready(post: Post, twitter_text: str) -> dict:
     title = post.chosen_title or "(제목 없음)"
-    text_block = twitter_text[:280] if twitter_text else "X 공유문 생성 실패"
+    text_block = twitter_text if twitter_text else "X 공유문 생성 실패"
     return {
         "text": f"🐦 X 공유문 준비됨: {title}",
         "blocks": [
