@@ -1,10 +1,10 @@
 """기존 포스트 제목을 검색형으로 개선하는 후보를 생성.
 
 사용법:
-    python scripts/optimize_titles.py [--apply]
+    python scripts/optimize_titles.py [--apply] [--slug <slug>]
 
 동작:
-1. data/posts.json에서 포스트 목록과 현재 제목 읽기
+1. WordPress REST API로 발행된 포스트 목록 직접 조회
 2. DeepSeek으로 각 제목의 검색형 개선안 3개 생성
 3. 결과를 data/title_suggestions.json에 저장
 4. --apply 시 WordPress REST API로 첫 번째 개선안 자동 적용
@@ -15,6 +15,7 @@ import argparse
 import base64
 import json
 import logging
+import re
 import sys
 import time
 from pathlib import Path
@@ -60,8 +61,27 @@ def _cred() -> str:
     ).decode()
 
 
+def get_all_posts(cred: str) -> list[dict]:
+    """WordPress REST API로 발행된 모든 포스트 조회."""
+    posts = []
+    page = 1
+    while True:
+        r = requests.get(
+            f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/posts",
+            params={"status": "publish", "per_page": 100, "page": page},
+            headers={"Authorization": f"Basic {cred}"},
+            timeout=30,
+        )
+        if not r.ok or not r.json():
+            break
+        posts.extend(r.json())
+        if len(r.json()) < 100:
+            break
+        page += 1
+    return posts
+
+
 def generate_candidates(title: str) -> dict:
-    """DeepSeek으로 제목 개선 후보 생성."""
     prompt = PROMPT_TMPL.format(title=title)
     raw = deepseek(prompt, system=SYSTEM, max_tokens=300, temperature=0.4)
     try:
@@ -71,32 +91,15 @@ def generate_candidates(title: str) -> dict:
         return {"candidates": [], "reason": "파싱 실패"}
 
 
-def apply_title_to_wordpress(wp_link: str, slug: str, new_title: str, cred: str) -> bool:
-    """WordPress REST API로 제목 업데이트."""
+def apply_title_to_wordpress(wp_id: int, new_title: str, cred: str) -> bool:
     try:
-        r = requests.get(
-            f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/posts",
-            params={"slug": slug},
-            headers={"Authorization": f"Basic {cred}"},
-            timeout=10,
-        )
-        r.raise_for_status()
-        posts = r.json()
-        if not posts:
-            log.warning(f"슬러그 '{slug}' 포스트를 찾을 수 없음")
-            return False
-        wp_id = posts[0]["id"]
-
-        r2 = requests.post(
+        r = requests.post(
             f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/posts/{wp_id}",
             json={"title": new_title},
-            headers={
-                "Authorization": f"Basic {cred}",
-                "Content-Type": "application/json",
-            },
+            headers={"Authorization": f"Basic {cred}", "Content-Type": "application/json"},
             timeout=15,
         )
-        r2.raise_for_status()
+        r.raise_for_status()
         log.info(f"  제목 업데이트 완료: {new_title}")
         return True
     except Exception as e:
@@ -127,28 +130,25 @@ def main():
         log.error("WORDPRESS_URL / WORDPRESS_APP_PASSWORD 환경변수 미설정")
         sys.exit(1)
 
-    try:
-        posts = json.loads(cfg.POSTS_JSON.read_text(encoding="utf-8"))
-    except Exception as e:
-        log.error(f"posts.json 읽기 실패: {e}")
-        sys.exit(1)
-
-    published = [p for p in posts if p.get("status") == "published" and p.get("wp_link")]
+    cred = _cred()
+    log.info("WordPress 포스트 목록 조회 중...")
+    posts = get_all_posts(cred)
+    log.info(f"총 {len(posts)}개 발행 포스트 조회됨")
 
     if args.slug:
-        published = [p for p in published if p.get("slug") == args.slug]
-        if not published:
-            log.error(f"슬러그 '{args.slug}' 포스트를 찾을 수 없음")
+        posts = [p for p in posts if p.get("slug") == args.slug]
+        if not posts:
+            log.error(f"슬러그 '{args.slug}'를 찾을 수 없음")
             sys.exit(1)
 
-    log.info(f"처리 대상: {len(published)}개 포스트")
-    cred = _cred() if args.apply else ""
-
     suggestions = []
-    for post in published:
-        title = post.get("title", "")
+    for post in posts:
+        wp_id = post.get("id")
         slug = post.get("slug", "")
-        wp_link = post.get("wp_link", "")
+        title_raw = post.get("title", {})
+        title = title_raw.get("rendered", "") if isinstance(title_raw, dict) else str(title_raw)
+        title = re.sub(r"<[^>]+>", "", title).strip()
+        link = post.get("link", "")
 
         log.info(f"분석 중: {title[:50]}")
         result = generate_candidates(title)
@@ -156,33 +156,34 @@ def main():
         reason = result.get("reason", "")
 
         entry = {
+            "wp_id": wp_id,
             "slug": slug,
             "current_title": title,
-            "wp_link": wp_link,
+            "link": link,
             "candidates": candidates,
             "reason": reason,
         }
 
         if candidates:
-            log.info(f"  추천 제목: {candidates[0]}")
+            log.info(f"  추천: {candidates[0]}")
             log.info(f"  이유: {reason}")
 
-        if args.apply and candidates:
-            if apply_title_to_wordpress(wp_link, slug, candidates[0], cred):
+        if args.apply and candidates and wp_id:
+            if apply_title_to_wordpress(wp_id, candidates[0], cred):
                 entry["applied"] = candidates[0]
 
         suggestions.append(entry)
         time.sleep(3)
 
+    cfg.DATA_DIR.mkdir(parents=True, exist_ok=True)
     output_path = cfg.DATA_DIR / "title_suggestions.json"
     output_path.write_text(
         json.dumps(suggestions, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     log.info(f"완료: {len(suggestions)}개 포스트 분석 → {output_path}")
-
     if not args.apply:
-        log.info("결과를 data/title_suggestions.json에서 검토 후 --apply 플래그로 적용하세요.")
+        log.info("검토 후 --apply 플래그로 적용하세요.")
 
 
 if __name__ == "__main__":
