@@ -113,8 +113,9 @@ def is_truncated(raw_content: str) -> bool:
 
 
 def generate_conclusion(post_title: str, existing_content_text: str) -> str:
-    """GLM으로 잘린 포스트의 결론 섹션 생성."""
-    # 기존 내용의 마지막 1000자를 컨텍스트로 사용
+    """DeepSeek으로 잘린 포스트의 결론 섹션 생성.
+    GLM thinking 모드는 max_tokens를 소진해 빈 응답이 나올 수 있어 DeepSeek 사용.
+    """
     context_tail = existing_content_text[-1500:] if len(existing_content_text) > 1500 else existing_content_text
 
     prompt = f"""다음은 한국 AI 기술 블로그 포스트입니다. 포스트가 중간에 잘려 결론이 없습니다.
@@ -129,13 +130,14 @@ def generate_conclusion(post_title: str, existing_content_text: str) -> str:
 
 요구사항:
 - ## 결론 또는 ## 마치며 헤딩으로 시작
-- 3~5문단으로 핵심 내용 요약
+- 3~5문장으로 핵심 내용 요약
 - 독자에게 실무 적용 포인트 제시
-- 마지막에 ## 참고 자료 섹션 포함 (출처 URL은 이미 본문에 있으면 생략 가능)
-- 500~800자 분량
+- 마지막에 ## 참고 자료 섹션 포함
+- 400~600자 분량
 - 잘린 앞 내용과 자연스럽게 이어지도록 작성"""
 
-    return glm(prompt, max_tokens=2048, temperature=0.6)
+    result = deepseek(prompt, max_tokens=1024, temperature=0.5)
+    return result
 
 
 def repair_post(post: dict, cred: str, dry_run: bool = False) -> bool:
