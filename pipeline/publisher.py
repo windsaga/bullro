@@ -385,6 +385,14 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
         img_bytes = img_resp.content
         content_type = img_resp.headers.get("Content-Type", "image/jpeg").split(";")[0].strip()
 
+        # HTML 오류 페이지를 이미지로 잘못 업로드하는 것 방지
+        if not content_type.startswith("image/"):
+            log.warning(f"썸네일 Content-Type 비정상: {content_type} — 업로드 스킵")
+            return None
+        if len(img_bytes) < 1024:
+            log.warning(f"썸네일 파일 크기 너무 작음 ({len(img_bytes)}B) — 업로드 스킵")
+            return None
+
         filename = _safe_media_filename(title, content_type)
         endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/media"
 
@@ -404,7 +412,7 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
             log.info(f"썸네일 업로드 완료: media_id={media_id}")
             return media_id
     except Exception as e:
-        log.warning(f"썸네일 WordPress 업로드 실패 (본문 이미지 태그로 대체): {e}")
+        log.warning(f"썸네일 WordPress 업로드 실패: {e}")
         return None
 
 
