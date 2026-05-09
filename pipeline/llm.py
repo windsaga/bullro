@@ -88,12 +88,20 @@ def _is_rate_limit(e: Exception) -> bool:
     return "429" in msg or "Too Many Requests" in msg or "rate limit" in msg.lower()
 
 
+def _is_server_error(e: Exception) -> bool:
+    """504/502/503 같은 서버측 일시 오류."""
+    msg = str(e)
+    return any(code in msg for code in ("504", "502", "503", "Gateway", "upstream"))
+
+
 def _call_with_retry(fn, retries: int = 5, backoff: float = 10.0, rate_limit_retries: int = 2):
     """NVIDIA API 호출 + 재시도.
     - 일반 오류: retries회까지 재시도
-    - 429: rate_limit_retries회만 재시도 후 즉시 RateLimitError (일일 한도 소진 대응)
+    - 429: rate_limit_retries회만 재시도 후 즉시 RateLimitError (Claude 폴백)
+    - 504/502/503 지속: retries 소진 시 RateLimitError로 변환 → Claude 폴백
     """
     rl_count = 0  # 429 연속 횟수
+    server_err_count = 0  # 5xx 연속 횟수
     for attempt in range(retries):
         _rate_limit_wait()
         try:
@@ -110,8 +118,20 @@ def _call_with_retry(fn, retries: int = 5, backoff: float = 10.0, rate_limit_ret
                     f"NVIDIA API Rate Limit (429 횟수 {rl_count}/{rate_limit_retries}) — {wait:.0f}초 대기 후 재시도"
                 )
                 time.sleep(wait)
+            elif _is_server_error(e):
+                server_err_count += 1
+                if attempt == retries - 1:
+                    raise RateLimitError(
+                        f"NVIDIA API 서버 오류 {server_err_count}회 연속 — Claude 폴백"
+                    ) from e
+                wait = backoff * (2 ** attempt)
+                log.warning(
+                    f"NVIDIA API 서버 오류 (시도 {attempt+1}/{retries}): {e} — {wait:.0f}초 대기"
+                )
+                time.sleep(wait)
             else:
-                rl_count = 0  # 429 연속 카운터 리셋
+                rl_count = 0
+                server_err_count = 0
                 if attempt == retries - 1:
                     raise
                 wait = backoff * (2 ** attempt)
