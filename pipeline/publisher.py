@@ -39,9 +39,9 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
         f"{cfg.WORDPRESS_USERNAME}:{cfg.WORDPRESS_APP_PASSWORD}".encode()
     ).decode()
 
-    # Markdown → HTML 변환
+    # Markdown → HTML 변환 (cred 전달 → Mermaid 블록을 WP 미디어로 업로드)
     raw_md = _strip_frontmatter(post.draft.content)
-    html_body = _md_to_html(raw_md)
+    html_body = _md_to_html(raw_md, cred=cred)
 
     # 태그 이름 → WordPress 태그 ID 변환
     tag_ids = _resolve_tag_ids(post.seo.tags[:10], cred)
@@ -155,10 +155,12 @@ def _clean_llm_markdown(text: str) -> str:
     return joined
 
 
-def _md_to_html(content: str) -> str:
+def _md_to_html(content: str, cred: str = "") -> str:
     """Markdown을 WordPress용 HTML로 변환."""
     # LLM 아티팩트 주석 제거 (P6 팩트체크가 삽입하는 <!-- CHANGES: ... -->)
     content = re.sub(r'\s*<!--\s*CHANGES:.*?-->\s*', '', content, flags=re.DOTALL)
+    # Mermaid 코드 블록 → 이미지로 변환 (변환 후 일반 코드블록이 되도록 처리)
+    content = _convert_mermaid_blocks(content, cred)
     cleaned = _clean_llm_markdown(content)
     html = md.markdown(
         cleaned,
@@ -171,6 +173,58 @@ def _md_to_html(content: str) -> str:
         ],
     )
     return _verify_html_structure(html)
+
+
+def _convert_mermaid_blocks(content: str, cred: str = "") -> str:
+    """Mermaid 코드 블록을 mermaid.ink 이미지로 변환.
+    변환 실패 시 원본 코드 블록 유지."""
+    def replace_block(m: re.Match) -> str:
+        mermaid_code = m.group(1).strip()
+        try:
+            encoded = base64.urlsafe_b64encode(mermaid_code.encode()).decode()
+            img_url = f"https://mermaid.ink/img/{encoded}?bgColor=white"
+            r = requests.get(img_url, timeout=30)
+            if r.status_code != 200 or len(r.content) < 500:
+                log.warning(f"Mermaid 변환 실패 (status={r.status_code}), 코드 블록 유지")
+                return m.group(0)
+
+            content_type = r.headers.get("Content-Type", "image/png").split(";")[0]
+            filename = "mermaid-diagram.png"
+
+            if cred:
+                r2 = requests.post(
+                    f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/media",
+                    data=r.content,
+                    headers={
+                        "Authorization": f"Basic {cred}",
+                        "Content-Type": content_type,
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                    },
+                    timeout=30,
+                )
+                if r2.ok:
+                    wp_url = r2.json().get("source_url", img_url)
+                    log.info(f"Mermaid → WordPress 미디어 업로드: {wp_url}")
+                else:
+                    wp_url = img_url
+            else:
+                wp_url = img_url
+
+            return (
+                f'\n\n<figure class="wp-block-image">'
+                f'<img src="{wp_url}" alt="다이어그램" style="max-width:100%"/>'
+                f'</figure>\n\n'
+            )
+        except Exception as e:
+            log.warning(f"Mermaid 변환 오류: {e} — 코드 블록 유지")
+            return m.group(0)
+
+    return re.sub(
+        r'```mermaid\n(.*?)```',
+        replace_block,
+        content,
+        flags=re.DOTALL,
+    )
 
 
 # Section heading prefixes GLM uses across all angles
