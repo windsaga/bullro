@@ -1,0 +1,52 @@
+{
+  "_comment": "weight 기준: 2.0=최고관심 / 1.5=관심 / 1.0=보통 / 0.3=낮음. boost_cap은 composite_score에 더할 최대 가산점.",
+  "boost_cap": 1.2,
+  "topics": [
+    {
+      "name": "로컬 AI 설치/운영",
+      "weight": 2.0,
+      "keywords": [
+        "ollama", "open webui", "lm studio", "localai", "llama.cpp", "jan.ai",
+        "로컬 llm", "로컬 ai", "local llm", "local ai", "self-hosted",
+        "on-premise", "edge ai", "private llm", "gguf", "ggml",
+        "koboldcpp", "text-generation-webui", "privateGPT"
+      ]
+    },
+    {
+      "name": "AI 코딩 도구/CLI",
+      "weight": 2.0,
+      "keywords": [
+        "claude code", "codex cli", "gemini cli", "aider", "continue.dev",
+        "cursor", "copilot", "codeium", "supermaven", "tabby",
+        "ai coding", "ai coder", "code generation", "코딩 ai", "ai 코딩",
+        "devin", "swe-agent", "opendevin", "developer tool", "개발 도구"
+      ]
+    },
+    {
+      "name": "Synology NAS / Docker 운영",
+      "weight": 1.5,
+      "keywords": [
+        "synology", "nas", "docker compose", "homelab", "self-host",
+        "container", "portainer", "proxmox", "home server", "홈서버",
+        "도커", "컨테이너"
+      ]
+    },
+    {
+      "name": "WordPress 자동화/SEO",
+      "weight": 1.2,
+      "keywords": [
+        "wordpress", "seo", "블로그 자동화", "blog automation",
+        "content automation", "콘텐츠 자동화", "rss", "headless cms"
+      ]
+    },
+    {
+      "name": "최신 모델/뉴스 요약",
+      "weight": 0.3,
+      "keywords": [
+        "gpt-5", "gpt5", "claude 4", "gemini 2", "model release",
+        "새 모델", "신규 모델", "출시", "발표", "announcement",
+        "benchmark", "leaderboard", "mmlu", "lmsys"
+      ]
+    }
+  ]
+}

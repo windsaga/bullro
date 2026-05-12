@@ -19,6 +19,59 @@ W_REDDIT = 0.3
 W_HF = 0.2
 W_GITHUB = 0.1
 
+# 유저 관심도 설정 파일 (data/user_interests.json)
+_INTERESTS_PATH = Path(__file__).parent.parent / "data" / "user_interests.json"
+_interests_cache: dict | None = None
+
+
+def _load_interests() -> dict:
+    global _interests_cache
+    if _interests_cache is not None:
+        return _interests_cache
+    if not _INTERESTS_PATH.exists():
+        _interests_cache = {"topics": [], "boost_cap": 0.0}
+        return _interests_cache
+    try:
+        _interests_cache = json.loads(_INTERESTS_PATH.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning(f"user_interests.json 로드 실패: {e}")
+        _interests_cache = {"topics": [], "boost_cap": 0.0}
+    return _interests_cache
+
+
+def _interest_boost(title: str, content: str) -> float:
+    """제목·본문 키워드 매칭으로 유저 관심도 부스트 점수를 계산한다.
+
+    제목 매칭은 본문보다 2배 가중치 적용.
+    반환값: 0 ~ boost_cap 범위.
+    """
+    interests = _load_interests()
+    topics: list[dict] = interests.get("topics", [])
+    boost_cap: float = float(interests.get("boost_cap", 0.0))
+    if not topics or boost_cap == 0:
+        return 0.0
+
+    title_lower = title.lower()
+    content_lower = (content or "")[:1000].lower()
+
+    best_score = 0.0
+    for topic in topics:
+        keywords: list[str] = topic.get("keywords", [])
+        weight: float = float(topic.get("weight", 1.0))
+        if not keywords:
+            continue
+        title_hits = sum(1 for kw in keywords if kw.lower() in title_lower)
+        content_hits = sum(1 for kw in keywords if kw.lower() in content_lower)
+        raw = (title_hits * 2 + content_hits) / (len(keywords) * 2)
+        topic_score = min(raw * weight, weight)
+        if topic_score > best_score:
+            best_score = topic_score
+
+    max_weight = max((float(t.get("weight", 1.0)) for t in topics), default=1.0)
+    normalized = best_score / max_weight if max_weight > 0 else 0.0
+    return round(normalized * boost_cap, 4)
+
+
 DEDUP_BATCH_SIZE = 20
 HISTORY_LIMIT = 60
 
@@ -63,6 +116,9 @@ def score_and_deduplicate(
             + W_HF * z_hf[i]
             + W_GITHUB * math.log1p(github_sd[i])
         )
+        boost = _interest_boost(a.title, a.content)
+        if boost > 0:
+            log.debug("관심도 부스트 +%.3f: %s", boost, a.title[:50])
         scored.append(ScoredArticle(
             url=a.url,
             title=a.title,
@@ -70,7 +126,7 @@ def score_and_deduplicate(
             source=a.source,
             published_at=a.published_at,
             signals=a.signals,
-            composite_score=composite,
+            composite_score=composite + boost,
         ))
 
     # 3. 점수 내림차순 정렬
