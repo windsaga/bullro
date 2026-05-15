@@ -66,7 +66,7 @@ def _get_client(slow: bool = False) -> OpenAI:
             _client_fast = OpenAI(
                 base_url=cfg.NVIDIA_BASE_URL,
                 api_key=cfg.NVIDIA_API_KEY,
-                timeout=120.0,   # DeepSeek: 2분이면 충분
+                timeout=180.0,   # DeepSeek: 웹검색 자료 포함 시 최대 3분
                 max_retries=0,
             )
         return _client_fast
@@ -94,20 +94,39 @@ def _is_server_error(e: Exception) -> bool:
     return any(code in msg for code in ("504", "502", "503", "Gateway", "upstream"))
 
 
-def _call_with_retry(fn, retries: int = 5, backoff: float = 10.0, rate_limit_retries: int = 2):
+def _is_timeout(e: Exception) -> bool:
+    """ReadTimeout / APITimeoutError."""
+    msg = str(e).lower()
+    return "timeout" in msg or "timed out" in msg
+
+
+def _call_with_retry(fn, retries: int = 3, backoff: float = 10.0, rate_limit_retries: int = 2):
     """NVIDIA API 호출 + 재시도.
-    - 일반 오류: retries회까지 재시도
-    - 429: rate_limit_retries회만 재시도 후 즉시 RateLimitError (Claude 폴백)
-    - 504/502/503 지속: retries 소진 시 RateLimitError로 변환 → Claude 폴백
+    - 타임아웃: 2회까지 재시도 후 RateLimitError → Claude 폴백
+    - 429: rate_limit_retries회만 재시도 후 RateLimitError → Claude 폴백
+    - 504/502/503: retries 소진 시 RateLimitError → Claude 폴백
+    - 기타 오류: retries 소진 시 raise
     """
-    rl_count = 0  # 429 연속 횟수
-    server_err_count = 0  # 5xx 연속 횟수
+    rl_count = 0
+    server_err_count = 0
+    timeout_count = 0
     for attempt in range(retries):
         _rate_limit_wait()
         try:
             return fn()
         except Exception as e:
-            if _is_rate_limit(e):
+            if _is_timeout(e):
+                timeout_count += 1
+                if timeout_count >= 2:
+                    raise RateLimitError(
+                        f"NVIDIA API 타임아웃 {timeout_count}회 연속 — Claude 폴백"
+                    ) from e
+                wait = 30.0
+                log.warning(
+                    f"NVIDIA API 타임아웃 (시도 {attempt+1}/{retries}) — {wait:.0f}초 대기 후 재시도"
+                )
+                time.sleep(wait)
+            elif _is_rate_limit(e):
                 rl_count += 1
                 if rl_count >= rate_limit_retries:
                     raise RateLimitError(
@@ -132,6 +151,7 @@ def _call_with_retry(fn, retries: int = 5, backoff: float = 10.0, rate_limit_ret
             else:
                 rl_count = 0
                 server_err_count = 0
+                timeout_count = 0
                 if attempt == retries - 1:
                     raise
                 wait = backoff * (2 ** attempt)
