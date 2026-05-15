@@ -45,7 +45,7 @@ def _build_payload(event: str, **kwargs) -> dict:
     elif event == "published":
         return _payload_published(kwargs["post"], kwargs.get("wp_link", ""))
     elif event == "share_ready":
-        return _payload_share_ready(kwargs["post"], kwargs.get("twitter_text", ""))
+        return _payload_share_ready(kwargs["post"], kwargs.get("threads", []))
     elif event == "low_quality":
         return _payload_low_quality(kwargs["topic"], kwargs["critique"])
     elif event == "pending":
@@ -113,32 +113,31 @@ def _payload_published(post: Post, wp_link: str) -> dict:
     }
 
 
-def _payload_share_ready(post: Post, twitter_text: str) -> dict:
+def _payload_share_ready(post: Post, threads: list) -> dict:
     title = post.chosen_title or "(제목 없음)"
-    text_block = twitter_text if twitter_text else "X 공유문 생성 실패"
-    return {
-        "text": f"🐦 X 공유문 준비됨: {title}",
-        "blocks": [
-            {
-                "type": "header",
-                "text": {"type": "plain_text", "text": "🐦 X 공유문 준비됨"},
-            },
-            {
+
+    blocks: list[dict] = [
+        {"type": "header", "text": {"type": "plain_text", "text": "X 스레드 준비됨"}},
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*포스트:* <{post.wp_link}|{title}>"},
+        },
+        {"type": "divider"},
+    ]
+
+    if threads:
+        for i, text in enumerate(threads, 1):
+            blocks.append({
                 "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*포스트:* <{post.wp_link}|{title}>",
-                },
-            },
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*X 공유문:*\n```{text_block}```",
-                },
-            },
-        ],
-    }
+                "text": {"type": "mrkdwn", "text": f"*{i}편*\n```{text}```"},
+            })
+    else:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "X 공유문 생성 실패"},
+        })
+
+    return {"text": f"X 스레드 준비됨: {title}", "blocks": blocks}
 
 
 def _payload_low_quality(topic: SelectedTopic, critique: Critique) -> dict:

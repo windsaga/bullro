@@ -22,6 +22,12 @@ class Config:
     # GitHub
     GITHUB_TOKEN: str = ""
 
+    # YouTube Data API v3 (선택 — 없으면 YouTube 수집 건너뜀)
+    YOUTUBE_API_KEY: str = ""
+
+    # Tavily 웹검색 API (선택 — 없으면 DuckDuckGo 폴백)
+    TAVILY_API_KEY: str = ""
+
     # WordPress
     WORDPRESS_URL: str = ""
     WORDPRESS_USERNAME: str = ""
@@ -80,6 +86,8 @@ class Config:
         self.ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
         self.GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")
+        self.YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
+        self.TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 
         self.WORDPRESS_URL = os.getenv("WORDPRESS_URL", "").rstrip("/")
         self.WORDPRESS_USERNAME = os.getenv("WORDPRESS_USERNAME", "")

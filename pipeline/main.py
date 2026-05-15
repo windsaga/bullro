@@ -31,6 +31,8 @@ from pipeline.scorer import score_and_deduplicate
 from pipeline.stages.draft_guard import ensure_complete
 from pipeline.stages.p1_triage import p1_triage
 from pipeline.stages.p2_synthesis import p2_synthesis
+from pipeline.recent_dedup import filter_recent_duplicates
+from pipeline.web_search import research_topic
 from pipeline.stages.p3_draft import p3_draft
 from pipeline.stages.p4_critique import p4_critique
 from pipeline.stages.p5_revise import p5_revise
@@ -77,6 +79,18 @@ def run_pipeline() -> None:
     if not selected_topics:
         log.warning("P1 선별 결과 없음 — 종료")
         return
+
+    # ── STAGE 3.2: 최근 이력 중복 필터 ───────────────────────────
+    selected_topics = filter_recent_duplicates(
+        selected_topics, cfg.POSTS_JSON, cfg.PENDING_JSON
+    )
+    if not selected_topics:
+        log.warning("최근 이력 필터 후 남은 주제 없음 — 종료")
+        return
+
+    # ── STAGE 3.5: 웹검색 — 선정된 주제별 추가 자료 수집 ─────────
+    for topic in selected_topics:
+        topic.web_research = research_topic(topic)
 
     # ── 토픽별 처리 ───────────────────────────────────────────────
     published_count = 0

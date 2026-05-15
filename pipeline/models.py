@@ -26,6 +26,7 @@ class SelectedTopic:
     angle: str           # "기술심화" | "실용적용" | "한국맥락" | "비교분석"
     p1_scores: dict = field(default_factory=dict)
     reason: str = ""
+    web_research: str = ""   # 웹검색으로 수집한 보강 자료 (P2에서 사용)
 
 
 @dataclass

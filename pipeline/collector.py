@@ -1,4 +1,4 @@
-"""Tier1/2 소스 수집 — arxiv, GitHub, 공식 블로그 RSS, HN, Reddit, HuggingFace, PwC."""
+"""소스 수집 — 공식 블로그 RSS, GitHub 릴리즈, YouTube 키워드/채널."""
 from __future__ import annotations
 
 import json
@@ -39,6 +39,22 @@ REDDIT_SUBS = [
 HF_PAPERS = "https://huggingface.co/papers"
 PWC_RSS = "https://paperswithcode.com/latest.xml"
 
+YOUTUBE_SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
+YOUTUBE_VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
+YOUTUBE_KEYWORDS = [
+    "claude code tutorial",
+    "LLM benchmark 2026",
+    "AI agent development",
+    "large language model explained",
+    "GPT codex developer",
+]
+YOUTUBE_DAYS = 7
+YOUTUBE_MAX_PER_KEYWORD = 10
+YOUTUBE_MIN_DURATION = "medium"  # medium=4~20분, long=20분+ (숏츠·밈 제거)
+
+YOUTUBE_CHANNELS_PATH = cfg.DATA_DIR / "youtube_channels.json"
+YOUTUBE_CHANNEL_DAYS = 7   # 채널에서 최근 N일 영상만 수집
+
 HEADERS = {"User-Agent": cfg.REDDIT_USER_AGENT}
 
 
@@ -47,15 +63,13 @@ def collect_articles() -> list[Article]:
     articles: list[Article] = []
 
     sources = [
-        ("arxiv", _collect_arxiv),
         ("blogs", _collect_official_blogs),
-        ("hn", _collect_hn),
-        ("reddit", _collect_reddit),
-        ("hf", _collect_huggingface),
-        ("pwc", _collect_pwc),
     ]
     if cfg.GITHUB_TOKEN:
         sources.append(("github", _collect_github))
+    if cfg.YOUTUBE_API_KEY:
+        sources.append(("youtube", _collect_youtube))
+        sources.append(("youtube_ch", _collect_youtube_channels))
 
     for name, fn in sources:
         try:
@@ -68,7 +82,12 @@ def collect_articles() -> list[Article]:
     seen: set[str] = set()
     unique: list[Article] = []
     for a in articles:
-        key = a.url.split("?")[0].rstrip("/")
+        # YouTube는 ?v= 파라미터가 식별자이므로 전체 URL을 키로 사용
+        # 그 외 소스는 UTM 등 트래킹 파라미터 제거
+        if a.source == "youtube":
+            key = a.url.rstrip("/")
+        else:
+            key = a.url.split("?")[0].rstrip("/")
         if key not in seen:
             seen.add(key)
             unique.append(a)
@@ -326,3 +345,182 @@ def _entry_content(entry) -> str:
     if hasattr(entry, "content") and entry.content:
         return entry.content[0].get("value", "")
     return getattr(entry, "summary", "") or getattr(entry, "description", "")
+
+
+# ── YouTube ───────────────────────────────────────────────────────────────
+
+
+def _collect_youtube() -> list[Article]:
+    """YouTube Data API v3로 최근 7일 AI 관련 영상 수집."""
+    from datetime import timedelta
+    api_key = cfg.YOUTUBE_API_KEY
+    published_after = (
+        datetime.now(tz=timezone.utc) - timedelta(days=YOUTUBE_DAYS)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    video_ids: list[str] = []
+    snippets: dict[str, dict] = {}
+
+    for keyword in YOUTUBE_KEYWORDS:
+        try:
+            resp = requests.get(
+                YOUTUBE_SEARCH_URL,
+                params={
+                    "part": "snippet",
+                    "q": keyword,
+                    "type": "video",
+                    "publishedAfter": published_after,
+                    "maxResults": YOUTUBE_MAX_PER_KEYWORD,
+                    "order": "viewCount",
+                    "videoDuration": YOUTUBE_MIN_DURATION,
+                    "relevanceLanguage": "en",
+                    "key": api_key,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("items", []):
+                vid_id = item["id"]["videoId"]
+                if vid_id not in snippets:
+                    video_ids.append(vid_id)
+                    snippets[vid_id] = item["snippet"]
+            time.sleep(0.5)
+        except Exception as e:
+            log.debug(f"YouTube 검색 실패 [{keyword}]: {e}")
+
+    if not video_ids:
+        return []
+
+    # 조회수 일괄 조회 (50개씩 배치)
+    stats: dict[str, dict] = {}
+    for i in range(0, len(video_ids), 50):
+        batch = video_ids[i : i + 50]
+        try:
+            resp = requests.get(
+                YOUTUBE_VIDEOS_URL,
+                params={"part": "statistics", "id": ",".join(batch), "key": api_key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("items", []):
+                stats[item["id"]] = item.get("statistics", {})
+        except Exception as e:
+            log.debug(f"YouTube 통계 조회 실패: {e}")
+
+    articles: list[Article] = []
+    seen: set[str] = set()
+    for vid_id in video_ids:
+        if vid_id in seen:
+            continue
+        seen.add(vid_id)
+        snippet = snippets[vid_id]
+        views = int(stats.get(vid_id, {}).get("viewCount", 0))
+        articles.append(
+            Article(
+                url=f"https://www.youtube.com/watch?v={vid_id}",
+                title=snippet.get("title", ""),
+                content=snippet.get("description", "")[:2000],
+                source="youtube",
+                published_at=snippet.get("publishedAt", ""),
+                signals={"youtube_views": views},
+            )
+        )
+
+    return articles
+
+
+def _collect_youtube_channels() -> list[Article]:
+    """youtube_channels.json 채널의 최근 영상을 수집한다.
+
+    search API(100유닛) 대신 playlistItems API(1유닛)를 사용해 쿼터를 아낀다.
+    """
+    from datetime import timedelta
+
+    if not YOUTUBE_CHANNELS_PATH.exists():
+        log.debug("youtube_channels.json 없음 — 채널 수집 건너뜀")
+        return []
+
+    try:
+        channels = json.loads(YOUTUBE_CHANNELS_PATH.read_text(encoding="utf-8"))
+    except Exception as e:
+        log.warning("youtube_channels.json 로드 실패: %s", e)
+        return []
+
+    api_key = cfg.YOUTUBE_API_KEY
+    cutoff = (datetime.now(tz=timezone.utc) - timedelta(days=YOUTUBE_CHANNEL_DAYS)).isoformat()
+
+    video_ids: list[str] = []
+    channel_of: dict[str, str] = {}   # video_id → channel name
+
+    for ch in channels:
+        ch_id = ch.get("channel_id", "")
+        ch_name = ch.get("name", ch_id)
+        if not ch_id:
+            continue
+
+        # 채널의 업로드 플레이리스트 ID 조회 (UC... → UU...)
+        uploads_playlist = "UU" + ch_id[2:]
+
+        try:
+            resp = requests.get(
+                "https://www.googleapis.com/youtube/v3/playlistItems",
+                params={
+                    "part": "snippet",
+                    "playlistId": uploads_playlist,
+                    "maxResults": 10,
+                    "key": api_key,
+                },
+                timeout=15,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("items", []):
+                snippet = item.get("snippet", {})
+                published = snippet.get("publishedAt", "")
+                if published < cutoff:
+                    continue
+                vid_id = snippet.get("resourceId", {}).get("videoId", "")
+                if vid_id and vid_id not in channel_of:
+                    video_ids.append(vid_id)
+                    channel_of[vid_id] = ch_name
+            time.sleep(0.3)
+        except Exception as e:
+            log.debug("채널 수집 실패 [%s]: %s", ch_name, e)
+
+    if not video_ids:
+        return []
+
+    # 조회수 일괄 조회
+    stats: dict[str, dict] = {}
+    snippets_map: dict[str, dict] = {}
+    for i in range(0, len(video_ids), 50):
+        batch = video_ids[i : i + 50]
+        try:
+            resp = requests.get(
+                YOUTUBE_VIDEOS_URL,
+                params={"part": "statistics,snippet", "id": ",".join(batch), "key": api_key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            for item in resp.json().get("items", []):
+                stats[item["id"]] = item.get("statistics", {})
+                snippets_map[item["id"]] = item.get("snippet", {})
+        except Exception as e:
+            log.debug("채널 영상 통계 조회 실패: %s", e)
+
+    articles: list[Article] = []
+    for vid_id in video_ids:
+        snippet = snippets_map.get(vid_id, {})
+        views = int(stats.get(vid_id, {}).get("viewCount", 0))
+        ch_name = channel_of.get(vid_id, "")
+        articles.append(
+            Article(
+                url=f"https://www.youtube.com/watch?v={vid_id}",
+                title=snippet.get("title", ""),
+                content=f"[{ch_name}] " + snippet.get("description", "")[:1800],
+                source="youtube",
+                published_at=snippet.get("publishedAt", ""),
+                signals={"youtube_views": views, "channel": ch_name},
+            )
+        )
+
+    return articles

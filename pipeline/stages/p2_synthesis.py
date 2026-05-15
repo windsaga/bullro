@@ -38,7 +38,14 @@ SECTION_KEYS = {
 
 def p2_synthesis(topic: SelectedTopic) -> SynthesizedFacts:
     article = topic.article
-    content_truncated = article.content[:6000]  # 토큰 제한
+
+    # 웹검색 자료가 있으면 우선 사용, 없으면 수집 시 가져온 내용으로 폴백
+    if topic.web_research:
+        content_truncated = topic.web_research
+        log.info("P2: 웹검색 자료 사용 (%d자)", len(content_truncated))
+    else:
+        content_truncated = article.content[:6000]
+        log.info("P2: 수집 원문 사용 (%d자)", len(content_truncated))
 
     prompt = PROMPT_TMPL.format(
         title=article.title,

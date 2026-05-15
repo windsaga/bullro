@@ -13,64 +13,9 @@ from pipeline.models import Article, ScoredArticle
 
 log = logging.getLogger(__name__)
 
-# 신호 가중치
-W_HN = 0.4
-W_REDDIT = 0.3
-W_HF = 0.2
-W_GITHUB = 0.1
-
-# 유저 관심도 설정 파일 (data/user_interests.json)
-_INTERESTS_PATH = Path(__file__).parent.parent / "data" / "user_interests.json"
-_interests_cache: dict | None = None
-
-
-def _load_interests() -> dict:
-    global _interests_cache
-    if _interests_cache is not None:
-        return _interests_cache
-    if not _INTERESTS_PATH.exists():
-        _interests_cache = {"topics": [], "boost_cap": 0.0}
-        return _interests_cache
-    try:
-        _interests_cache = json.loads(_INTERESTS_PATH.read_text(encoding="utf-8"))
-    except Exception as e:
-        log.warning(f"user_interests.json 로드 실패: {e}")
-        _interests_cache = {"topics": [], "boost_cap": 0.0}
-    return _interests_cache
-
-
-def _interest_boost(title: str, content: str) -> float:
-    """제목·본문 키워드 매칭으로 유저 관심도 부스트 점수를 계산한다.
-
-    제목 매칭은 본문보다 2배 가중치 적용.
-    반환값: 0 ~ boost_cap 범위.
-    """
-    interests = _load_interests()
-    topics: list[dict] = interests.get("topics", [])
-    boost_cap: float = float(interests.get("boost_cap", 0.0))
-    if not topics or boost_cap == 0:
-        return 0.0
-
-    title_lower = title.lower()
-    content_lower = (content or "")[:1000].lower()
-
-    best_score = 0.0
-    for topic in topics:
-        keywords: list[str] = topic.get("keywords", [])
-        weight: float = float(topic.get("weight", 1.0))
-        if not keywords:
-            continue
-        title_hits = sum(1 for kw in keywords if kw.lower() in title_lower)
-        content_hits = sum(1 for kw in keywords if kw.lower() in content_lower)
-        raw = (title_hits * 2 + content_hits) / (len(keywords) * 2)
-        topic_score = min(raw * weight, weight)
-        if topic_score > best_score:
-            best_score = topic_score
-
-    max_weight = max((float(t.get("weight", 1.0)) for t in topics), default=1.0)
-    normalized = best_score / max_weight if max_weight > 0 else 0.0
-    return round(normalized * boost_cap, 4)
-
+# 신호 가중치 — YouTube 메인, GitHub 서브
+W_YOUTUBE = 0.70  # YouTube 조회수 (z-score) — 메인
+W_GITHUB  = 0.30  # GitHub 스타 증가량 (log1p 보정) — 서브
 
 DEDUP_BATCH_SIZE = 20
 HISTORY_LIMIT = 60
@@ -98,27 +43,24 @@ def score_and_deduplicate(
     """점수 산정 → DeepSeek 중복 제거 → composite_score 내림차순 반환."""
 
     # 1. 신호 수집
-    hn_pts = [float(a.signals.get("hn_points", 0)) for a in articles]
-    reddit_sc = [float(a.signals.get("reddit_score", 0)) for a in articles]
-    hf_up = [float(a.signals.get("hf_upvotes", 0)) for a in articles]
     github_sd = [float(a.signals.get("github_star_delta", 0)) for a in articles]
+    yt_views = [float(a.signals.get("youtube_views", 0)) for a in articles]
 
-    # 2. z-score 정규화
-    z_hn = _zscore(hn_pts)
-    z_reddit = _zscore(reddit_sc)
-    z_hf = _zscore(hf_up)
+    # 2. z-score 정규화 (YouTube)
+    z_youtube = _zscore(yt_views)
+
+    # WP 인기글 힌트는 한 번만 로드 (lru_cache)
+    wp_hints = _load_wp_hints()
 
     scored: list[ScoredArticle] = []
     for i, a in enumerate(articles):
         composite = (
-            W_HN * z_hn[i]
-            + W_REDDIT * z_reddit[i]
-            + W_HF * z_hf[i]
-            + W_GITHUB * math.log1p(github_sd[i])
+            W_GITHUB * math.log1p(github_sd[i])
+            + W_YOUTUBE * z_youtube[i]
         )
-        boost = _interest_boost(a.title, a.content)
-        if boost > 0:
-            log.debug("관심도 부스트 +%.3f: %s", boost, a.title[:50])
+        wp_boost = _wp_popular_boost(a.title, a.content, wp_hints)
+        if wp_boost > 0:
+            log.debug("WP 인기 부스트 +%.3f: %s", wp_boost, a.title[:50])
         scored.append(ScoredArticle(
             url=a.url,
             title=a.title,
@@ -126,7 +68,7 @@ def score_and_deduplicate(
             source=a.source,
             published_at=a.published_at,
             signals=a.signals,
-            composite_score=composite + boost,
+            composite_score=composite + wp_boost,
         ))
 
     # 3. 점수 내림차순 정렬
@@ -155,6 +97,43 @@ def _zscore(values: list[float]) -> list[float]:
     if std == 0:
         return [0.0] * len(values)
     return ((arr - arr.mean()) / std).tolist()
+
+
+def _load_wp_hints() -> list[dict]:
+    """wp_feedback 모듈이 없거나 실패해도 빈 리스트로 graceful 처리."""
+    try:
+        from pipeline.wp_feedback import WP_BOOST_CAP, get_popular_topic_hints  # noqa: F401
+        return get_popular_topic_hints()
+    except Exception as e:
+        log.debug(f"WP 힌트 로드 실패: {e}")
+        return []
+
+
+def _wp_popular_boost(title: str, content: str, hints: list[dict]) -> float:
+    """WP 인기글 카테고리/태그 기반 부스트 점수 (최대 WP_BOOST_CAP)."""
+    if not hints:
+        return 0.0
+    from pipeline.wp_feedback import WP_BOOST_CAP
+
+    title_lower = title.lower()
+    content_lower = (content or "")[:1000].lower()
+
+    best_score = 0.0
+    for hint in hints:
+        keywords: list[str] = hint.get("keywords", [])
+        weight = float(hint.get("weight", 0.0))
+        if not keywords:
+            continue
+        title_hits = sum(1 for kw in keywords if kw in title_lower)
+        content_hits = sum(1 for kw in keywords if kw in content_lower)
+        raw = (title_hits * 2 + content_hits) / (len(keywords) * 2)
+        score = min(raw * weight, weight)
+        if score > best_score:
+            best_score = score
+
+    max_weight = max((float(h.get("weight", 1.0)) for h in hints), default=1.0)
+    normalized = best_score / max_weight if max_weight > 0 else 0.0
+    return round(normalized * WP_BOOST_CAP, 4)
 
 
 def _deduplicate_with_deepseek(
