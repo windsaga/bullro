@@ -1,1 +1,647 @@
-[]
+[
+  {
+    "date": "2026-05-08T18:08:17.776768+00:00",
+    "title": "허깅페이스 악성코드 주의: Open-OSS 사칭 공급망 공격 분석",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t6febk/warning_openossprivacyfilter_malware/",
+    "wp_link": "https://windsaga.synology.me/hugging-face-malware/",
+    "slug": "hugging-face-malware",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "허깅페이스",
+      "공급망 공격",
+      "악성코드 분석",
+      "MLOps 보안",
+      "드로퍼"
+    ]
+  },
+  {
+    "date": "2026-05-08T18:12:55.995751+00:00",
+    "title": "LLaMA.cpp MTP로 LLM 추론 속도 40% 향상하기 | LLaMA.cpp MTP 추론 속도",
+    "url": "https://v.redd.it/ccxn81zo5tzg1",
+    "wp_link": "https://windsaga.synology.me/llama-cpp-mtp-inference-speed-optimization/",
+    "slug": "llama-cpp-mtp-inference-speed-optimization",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "LLaMA.cpp",
+      "Multi-Token Prediction",
+      "LLM 추론 최적화",
+      "Speculative Decoding",
+      "Gemma 4",
+      "로컬 LLM 서빙",
+      "GGUF 양자화",
+      "엣지 AI",
+      "온프레미스 추론",
+      "토큰 생성 속도"
+    ]
+  },
+  {
+    "date": "2026-05-08T18:16:27.797560+00:00",
+    "title": "AI 모델 비교 플랫폼 Countless.dev: LLM·TTS·STT 한 곳에서",
+    "url": "https://countless.dev/",
+    "wp_link": "https://windsaga.synology.me/ai-model-comparison-platform/",
+    "slug": "ai-model-comparison-platform",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "AI 모델 비교",
+      "Countless.dev",
+      "LLM 비교",
+      "AI 도구",
+      "모델 선택",
+      "TTS STT",
+      "AI 스타트업",
+      "개발자 도구"
+    ]
+  },
+  {
+    "date": "2026-05-08T22:06:48.928448+00:00",
+    "title": "연속적 사고 추론, LLM의 새로운 패러다임",
+    "url": "https://aipapersacademy.com/chain-of-continuous-thought/",
+    "wp_link": "https://windsaga.synology.me/chain-of-continuous-thought/",
+    "slug": "chain-of-continuous-thought",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "Coconut",
+      "Chain of Continuous Thought",
+      "잠재 공간 추론",
+      "LLM 최적화",
+      "Meta AI"
+    ]
+  },
+  {
+    "date": "2026-05-08T22:51:59.537740+00:00",
+    "title": "LLM 바이브코딩: AI 시대 개발 패러다임 전환",
+    "url": "https://www.stochasticlifestyle.com/a-guide-to-gen-ai-llm-vibecoding-for-expert-programmers/",
+    "wp_link": "https://windsaga.synology.me/llm-vibecoding-development-paradigm/",
+    "slug": "llm-vibecoding-development-paradigm",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "바이브코딩",
+      "LLM",
+      "생성형AI",
+      "프롬프트엔지니어링",
+      "개발생산성"
+    ]
+  },
+  {
+    "date": "2026-05-09T03:31:48.798734+00:00",
+    "title": "로컬 LLM 배포 완벽 가이드: VRAM 티어별 모델 추천",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1sknx6n/best_local_llms_apr_2026/",
+    "wp_link": "https://windsaga.synology.me/local-llm-deployment-guide/",
+    "slug": "local-llm-deployment-guide",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "로컬LLM",
+      "오픈웨이트모델",
+      "VRAM최적화",
+      "1비트양자화",
+      "온프레미스AI"
+    ]
+  },
+  {
+    "date": "2026-05-09T03:37:02.863393+00:00",
+    "title": "이종 GPU 클러스터로 LLM 추론 최적화하기 | 이종 GPU 클러스터 LLM 추론",
+    "url": "https://i.redd.it/vf2d4tkimszg1.jpeg",
+    "wp_link": "https://windsaga.synology.me/heterogeneous-gpu-cluster-llm-inference/",
+    "slug": "heterogeneous-gpu-cluster-llm-inference",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "LLM 추론",
+      "GPU 클러스터",
+      "Blackwell",
+      "프리필 디코드 분리",
+      "RDMA",
+      "KV Cache",
+      "DistServe",
+      "Mooncake",
+      "GPU 최적화",
+      "AI 인프라"
+    ]
+  },
+  {
+    "date": "2026-05-09T03:46:26.399705+00:00",
+    "title": "FFmpeg 자연어 CLI 도구 ezff로 복잡한 명령어 단순화하기",
+    "url": "http://npmjs.com/package/ezff",
+    "wp_link": "https://windsaga.synology.me/ffmpeg-natural-language-cli-wrapper/",
+    "slug": "ffmpeg-natural-language-cli-wrapper",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "FFmpeg",
+      "CLI 도구",
+      "자연어 처리",
+      "영상 처리",
+      "개발자 도구",
+      "오프라인 도구",
+      "정규표현식",
+      "npm 패키지",
+      "미디어 변환",
+      "DSL"
+    ]
+  },
+  {
+    "date": "2026-05-09T03:50:00.753873+00:00",
+    "title": "LLM API 성능 비교 가이드 — ArtificialAnalysis 벤치마크 분석",
+    "url": "https://artificialanalysis.ai",
+    "wp_link": "https://windsaga.synology.me/llm-api-performance-comparison-benchmark/",
+    "slug": "llm-api-performance-comparison-benchmark",
+    "angle": "비교분석",
+    "status": "published",
+    "tags": [
+      "LLM API 비교",
+      "성능 벤치마크",
+      "처리량 지연시간",
+      "ArtificialAnalysis",
+      "모델 선택 가이드",
+      "API 제공자 비교",
+      "개발자 가이드"
+    ]
+  },
+  {
+    "date": "2026-05-09T04:22:52.046827+00:00",
+    "title": "MEOW 이미지 포맷: LSB 스테가노그래피로 AI 메타데이터 인코딩하기 | MEOW 이미지 포맷 AI",
+    "url": "https://github.com/Kuberwastaken/meow",
+    "wp_link": "https://windsaga.synology.me/meow-image-format-ai-metadata/",
+    "slug": "meow-image-format-ai-metadata",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "MEOW 이미지 포맷",
+      "LSB 스테가노그래피",
+      "AI 메타데이터",
+      "멀티모달 AI",
+      "이미지 처리",
+      "PNG 포맷",
+      "AI 워크플로우",
+      "컨텍스트 보존"
+    ]
+  },
+  {
+    "date": "2026-05-09T04:36:05.991310+00:00",
+    "title": "LLM 선언형 제어: Constrained Decoding 원리와 실제 구현",
+    "url": "https://blog.codesolvent.com/2024/09/declarative-programming-with-aillms.html",
+    "wp_link": "https://windsaga.synology.me/llm-declarative-control-constrained-decoding/",
+    "slug": "llm-declarative-control-constrained-decoding",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "LLM",
+      "Constrained Decoding",
+      "선언형 프롬프트",
+      "JSON Schema",
+      "구조화된 출력",
+      "FSA",
+      "토큰 마스킹",
+      "Function Calling",
+      "Outlines 라이브러리",
+      "프롬프트 엔지니어링"
+    ]
+  },
+  {
+    "date": "2026-05-09T04:42:37.166106+00:00",
+    "title": "LLM 시대 개발자 역량: 코드 생성이 아닌 판단 능력이 핵심",
+    "url": "https://rajnandan.com/posts/taste-in-the-age-of-ai-and-llms/",
+    "wp_link": "https://windsaga.synology.me/llm-era-developer-competency-taste/",
+    "slug": "llm-era-developer-competency-taste",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "LLM 개발",
+      "개발자 역량",
+      "소프트웨어 아키텍처",
+      "ADR",
+      "기술 의사결정",
+      "AI 시대 개발",
+      "코드 리뷰",
+      "팀 문화"
+    ]
+  },
+  {
+    "date": "2026-05-09T04:49:05.418526+00:00",
+    "title": "Wikipedia 엔터프라이즈 API: LLM·AI 서비스를 위한 공식 데이터 채널",
+    "url": "https://enterprise.wikimedia.com/",
+    "wp_link": "https://windsaga.synology.me/wikipedia-enterprise-api-llm/",
+    "slug": "wikipedia-enterprise-api-llm",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "Wikipedia API",
+      "Wikimedia Enterprise",
+      "LLM 데이터",
+      "RAG 파이프라인",
+      "MediaWiki REST API",
+      "AI 데이터 소스",
+      "엔터프라이즈 API",
+      "Python httpx"
+    ]
+  },
+  {
+    "date": "2026-05-09T04:51:59.250895+00:00",
+    "title": "vLLM ROCm으로 AMD GPU에서 LLM 직접 실행하기 | vLLM ROCm AMD GPU",
+    "url": "https://i.redd.it/kesrnt4lgyzg1.png",
+    "wp_link": "https://windsaga.synology.me/vllm-rocm-amd-gpu-local-llm/",
+    "slug": "vllm-rocm-amd-gpu-local-llm",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "vLLM",
+      "ROCm",
+      "AMD GPU",
+      "로컬 LLM",
+      "safetensors",
+      "GGUF",
+      "Lemonade",
+      "PagedAttention",
+      "양자화",
+      "추론 최적화"
+    ]
+  },
+  {
+    "date": "2026-05-09T04:58:32.286573+00:00",
+    "title": "해커뉴스 AI 알고리즘: 콘텐츠 편중의 구조적 원인",
+    "url": "https://news.ycombinator.com/item?id=44571740",
+    "wp_link": "https://windsaga.synology.me/hacker-news-ai-algorithm-analysis/",
+    "slug": "hacker-news-ai-algorithm-analysis",
+    "angle": "비교분석",
+    "status": "published",
+    "tags": [
+      "해커뉴스",
+      "알고리즘",
+      "AI콘텐츠",
+      "커뮤니티",
+      "백엔드개발",
+      "기술트렌드",
+      "업보트메커니즘",
+      "에코챔버",
+      "정보소비전략",
+      "ML엔지니어"
+    ]
+  },
+  {
+    "date": "2026-05-09T05:05:50.165664+00:00",
+    "title": "LLMWare SLIM 모델로 저비용 RAG 파이프라인 구축하기",
+    "url": "https://github.com/llmware-ai/llmware",
+    "wp_link": "https://windsaga.synology.me/llmware-slim-models-rag-pipeline/",
+    "slug": "llmware-slim-models-rag-pipeline",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "LLMWare",
+      "SLIM 모델",
+      "RAG 파이프라인",
+      "오픈소스 LLM",
+      "함수 호출",
+      "텍스트 분류",
+      "정보 추출",
+      "개체명 인식",
+      "벡터 검색",
+      "엔터프라이즈 AI"
+    ]
+  },
+  {
+    "date": "2026-05-09T08:42:47.932796+00:00",
+    "title": "Qwen 35B-A3B 로컬 추론: 12GB VRAM 최적화 가이드",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7l56a/qwen_35ba3b_is_very_usable_with_12gb_of_vram/",
+    "wp_link": "https://windsaga.synology.me/qwen-35b-a3b-local-inference-optimization/",
+    "slug": "qwen-35b-a3b-local-inference-optimization",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "Qwen 35B-A3B",
+      "MoE 오프로딩",
+      "ncmoe",
+      "로컬 LLM",
+      "VRAM 최적화"
+    ]
+  },
+  {
+    "date": "2026-05-09T14:08:52.626028+00:00",
+    "title": "Qwen 27B를 RTX 4090에서 80 t/s로 구동하는 LLM 추론 최적화 설정",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7kyju/got_mtp_turboquant_running_qwen3627b_80_ts_at/",
+    "wp_link": "https://windsaga.synology.me/llm-inference-optimization-mtp-turboquant/",
+    "slug": "llm-inference-optimization-mtp-turboquant",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "llama.cpp",
+      "LLM 최적화",
+      "Qwen",
+      "MTP",
+      "TurboQuant",
+      "KV 캐시 압축",
+      "Speculative Decoding",
+      "GGUF 양자화",
+      "RTX 4090",
+      "로컬 LLM"
+    ]
+  },
+  {
+    "date": "2026-05-09T14:41:06.841156+00:00",
+    "title": "RTX 4090에서 Qwen 27B를 80+ t/s로 구동하는 MTP·TurboQuant 설정법",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7kyju/got_mtp_turboquant_running_qwen3627b_80_ts_at/",
+    "wp_link": "https://windsaga.synology.me/rtx-4090-llm-inference-optimization/",
+    "slug": "rtx-4090-llm-inference-optimization",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "RTX 4090",
+      "Qwen3.6-27B",
+      "MTP 드래프트 추론",
+      "TurboQuant KV 캐시",
+      "llama.cpp",
+      "로컬 LLM",
+      "GGUF 양자화",
+      "추론 속도 최적화",
+      "speculative decoding",
+      "온프레미스 AI"
+    ]
+  },
+  {
+    "date": "2026-05-09T14:44:52.763074+00:00",
+    "title": "EMO MoE 모델 라우팅: EMO 모델 문서 수준 라우팅 방식 완벽 가이드",
+    "url": "https://i.redd.it/zonmo2y79zzg1.png",
+    "wp_link": "https://windsaga.synology.me/emo-moe-document-level-routing-guide/",
+    "slug": "emo-moe-document-level-routing-guide",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "MoE 모델",
+      "문서 라우팅",
+      "AI2 EMO",
+      "조건부 연산",
+      "전문가 네트워크",
+      "도메인 클러스터링",
+      "라우팅 메커니즘"
+    ]
+  },
+  {
+    "date": "2026-05-09T15:44:29.660666+00:00",
+    "title": "DGX Spark GB10에서 vLLM 실행하기: 커뮤니티 최적화 설정",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7btln/unpopular_opinion_the_dgx_spark_forum_community/",
+    "wp_link": "https://windsaga.synology.me/dgx-spark-gb10-vllm-setup-guide/",
+    "slug": "dgx-spark-gb10-vllm-setup-guide",
+    "angle": "한국맥락",
+    "status": "published",
+    "tags": [
+      "DGX Spark GB10",
+      "vLLM",
+      "로컬 LLM",
+      "메모리 최적화",
+      "Llama 3.1",
+      "양자화",
+      "추론 성능",
+      "온프레미스 AI",
+      "GPU 벤치마크",
+      "Sparkrun"
+    ]
+  },
+  {
+    "date": "2026-05-09T17:58:50.463401+00:00",
+    "title": "LLM 추론 한계 분석 — 트랜스포머 구조적 결함과 해결 방법",
+    "url": "https://www.reddit.com/r/MachineLearning/comments/1t872cd/we_are_hitting_a_wall_trying_to_force/",
+    "wp_link": "https://windsaga.synology.me/llm-reasoning-limitations/",
+    "slug": "llm-reasoning-limitations",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "LLM 추론 한계",
+      "트랜스포머",
+      "소프트맥스",
+      "Chain of Thought",
+      "RAG"
+    ]
+  },
+  {
+    "date": "2026-05-09T18:53:51.948354+00:00",
+    "title": "Qwen3.6 MTP 언센서드: Qwen3.6 35B MTP 언센서드 모델 배포 가이드",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7qfaq/qwen36_35b_a3b_uncensored_heretic_native_mtp/",
+    "wp_link": "https://windsaga.synology.me/qwen3-6-mtp-uncensored-guide/",
+    "slug": "qwen3-6-mtp-uncensored-guide",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "Qwen3.6",
+      "MTP",
+      "언센서드",
+      "GGUF",
+      "safetensors"
+    ]
+  },
+  {
+    "date": "2026-05-09T19:41:17.992171+00:00",
+    "title": "RTX 4090에서 262K 컨텍스트 달성 — MTP와 TurboQuant 결합 가이드",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7kyju/got_mtp_turboquant_running_qwen3627b_80_ts_at/",
+    "wp_link": "https://windsaga.synology.me/rtx-4090-long-context-inference-optimization/",
+    "slug": "rtx-4090-long-context-inference-optimization",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "RTX 4090",
+      "Qwen 27B",
+      "MTP 투기적 디코딩",
+      "TurboQuant KV 캐시",
+      "llama.cpp",
+      "장문 컨텍스트",
+      "양자화",
+      "로컬 LLM",
+      "VRAM 최적화",
+      "262K 토큰"
+    ]
+  },
+  {
+    "date": "2026-05-09T19:45:07.147841+00:00",
+    "title": "BeeLlama.cpp로 RTX 3090에서 27B 모델 200k 컨텍스트 구동하기",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t88zvv/beellamacpp_advanced_dflash_turboquant_with/",
+    "wp_link": "https://windsaga.synology.me/beellama-cpp-local-inference-guide/",
+    "slug": "beellama-cpp-local-inference-guide",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "BeeLlama.cpp",
+      "llama.cpp",
+      "로컬 LLM 추론",
+      "DFlash 스펙큘레이티브 디코딩",
+      "TurboQuant KV-캐시 압축",
+      "RTX 3090",
+      "Qwen 27B",
+      "양자화",
+      "VRAM 최적화",
+      "로컬 AI 모델"
+    ]
+  },
+  {
+    "date": "2026-05-09T19:53:18.334442+00:00",
+    "title": "Qwen 27B KV 캐시 양자화로 262K 컨텍스트 80+ t/s 달성하기",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t7kyju/got_mtp_turboquant_running_qwen3627b_80_ts_at/",
+    "wp_link": "https://windsaga.synology.me/kv-cache-quantization-inference-optimization/",
+    "slug": "kv-cache-quantization-inference-optimization",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "KV 캐시 양자화",
+      "LLM 추론 최적화",
+      "MTP Medusa",
+      "Qwen 모델",
+      "RTX 4090",
+      "장문맥 처리",
+      "TBQ4_0",
+      "Speculative Decoding",
+      "VRAM 최적화",
+      "로컬 LLM"
+    ]
+  },
+  {
+    "date": "2026-05-09T20:43:53.007641+00:00",
+    "title": "BeeLlama.cpp로 RTX 3090에서 Qwen 27B 135 tps 구동하기",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t88zvv/beellamacpp_advanced_dflash_turboquant_with/",
+    "wp_link": "https://windsaga.synology.me/beellama-cpp-rtx-3090-optimization-guide/",
+    "slug": "beellama-cpp-rtx-3090-optimization-guide",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "BeeLlama.cpp",
+      "llama.cpp",
+      "RTX 3090",
+      "Qwen 27B",
+      "스펙큘레이티브 디코딩",
+      "KV-캐시 압축",
+      "로컬 LLM",
+      "GGUF 양자화",
+      "TurboQuant",
+      "TCQ"
+    ]
+  },
+  {
+    "date": "2026-05-09T22:39:40.208604+00:00",
+    "title": "llama.cpp MTP로 12GB VRAM에서 Qwen 35B 80 tok/sec 실행하기",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t82zxv/80_toksec_and_128k_context_on_12gb_vram_with/",
+    "wp_link": "https://windsaga.synology.me/llama-cpp-mtp-12gb-vram-qwen-35b/",
+    "slug": "llama-cpp-mtp-12gb-vram-qwen-35b",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "llama.cpp",
+      "MTP",
+      "Qwen",
+      "로컬 LLM",
+      "VRAM 최적화",
+      "CUDA",
+      "투기적 디코딩",
+      "GGUF",
+      "양자화",
+      "RTX 4070"
+    ]
+  },
+  {
+    "date": "2026-05-09T22:43:24.734922+00:00",
+    "title": "MEOW 이미지 포맷 완벽 가이드 — LSB 스테가노그래피로 AI 메타데이터 인코딩",
+    "url": "https://github.com/Kuberwastaken/meow",
+    "wp_link": "https://windsaga.synology.me/meow-image-format-lsb-steganography/",
+    "slug": "meow-image-format-lsb-steganography",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "MEOW 포맷",
+      "이미지 메타데이터",
+      "LSB 스테가노그래피",
+      "AI 추론 최적화",
+      "PNG 호환성",
+      "이미지 처리",
+      "메타데이터 인코딩"
+    ]
+  },
+  {
+    "date": "2026-05-10T21:31:38.995753+00:00",
+    "title": "NVIDIA Star Elastic 단일 체크포인트 추론 제어 가이드",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t8s83r/nvidia_ai_releases_star_elastic_one_checkpoint/",
+    "wp_link": "https://windsaga.synology.me/star-elastic-spectrum-inference-control/",
+    "slug": "star-elastic-spectrum-inference-control",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "NVIDIA",
+      "Star Elastic",
+      "제로샷 슬라이싱",
+      "Gumbel-Softmax",
+      "MoE"
+    ]
+  },
+  {
+    "date": "2026-05-10T21:59:17.952709+00:00",
+    "title": "DeepSeek V4 Pro 로컬 추론: 단일 GPU 구동 가이드",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t94ito/i_have_deepseek_v4_pro_at_home/",
+    "wp_link": "https://windsaga.synology.me/deepseek-v4-pro-local-inference/",
+    "slug": "deepseek-v4-pro-local-inference",
+    "angle": "실용적용",
+    "status": "published",
+    "tags": [
+      "DeepSeek V4 Pro",
+      "llama.cpp",
+      "Q4_K_M 양자화",
+      "로컬 LLM",
+      "CUDA 추론"
+    ]
+  },
+  {
+    "date": "2026-05-11T21:57:37.964171+00:00",
+    "title": "Qwen3 35B vs Gemma 4: 32GB VRAM 로컬 LLM 성능 비교",
+    "url": "https://www.reddit.com/r/LocalLLaMA/comments/1t9whrt/the_qwen_36_35b_a3b_hype_is_real/",
+    "wp_link": "https://windsaga.synology.me/local-llm-32gb-vram-comparison/",
+    "slug": "local-llm-32gb-vram-comparison",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "로컬 LLM",
+      "Qwen3",
+      "32GB VRAM",
+      "MoE 모델",
+      "장문맥 처리",
+      "코드 이해",
+      "Gemma 4",
+      "Nemotron",
+      "Sliding Window Attention",
+      "Mamba2"
+    ]
+  },
+  {
+    "date": "2026-05-12T21:33:48.180939+00:00",
+    "title": "Intel Optane PMem으로 1조 파라미터 LLM 로컬 실행 가이드",
+    "url": "https://i.redd.it/na7zo7lmck0h1.jpeg",
+    "wp_link": "https://windsaga.synology.me/local-llm-trillion-parameter-inference/",
+    "slug": "local-llm-trillion-parameter-inference",
+    "angle": "기술심화",
+    "status": "published",
+    "tags": [
+      "로컬 LLM",
+      "Intel Optane",
+      "1조 파라미터",
+      "llama.cpp",
+      "MoE 아키텍처",
+      "메모리 최적화",
+      "Kimi K2.5",
+      "양자화",
+      "GPU 오프로딩",
+      "PMem"
+    ]
+  },
+  {
+    "date": "2026-05-14",
+    "post_id": 205,
+    "post_title": "Claude Design 사용법 완벽 가이드: 대화로 프로토타입 만드는 법",
+    "url": "https://windsaga.synology.me/claude-design-guide/",
+    "slug": "claude-design-guide",
+    "focus_keyword": "Claude Design 사용법",
+    "category_type": "dev_tools",
+    "post_series": "AI 개발도구 워크플로우",
+    "media_id": 204,
+    "thumbnail_local": "assets/2026-05-14-claude-design-guide-thumb.jpg",
+    "angle": "실용적용",
+    "source_url": "https://www.anthropic.com/news/claude-design-anthropic-labs"
+  }
+]

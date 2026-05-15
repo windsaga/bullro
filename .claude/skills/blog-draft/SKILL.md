@@ -395,50 +395,258 @@ PYEOF
 
 ---
 
-## Phase 7.5: Codex 대표이미지 생성
+## Phase 7.3: DeepSeek SEO 메타 생성 + 카테고리 결정
 
-WordPress 업로드 전에 Codex CLI로 블로그 대표이미지(썸네일)를 생성합니다.
+최종고를 기반으로 SEO 메타데이터(제목 후보·키워드·태그·썸네일 프롬프트·시리즈)를 생성하고
+WordPress 카테고리를 자동 결정합니다.
+
+```bash
+SEO_JSON_FILE="$POSTS_DIR/.${POST_SLUG}-seo.json"
+
+python3 - <<'PYEOF'
+import os, json
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=os.environ.get("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"),
+    api_key=os.environ["NVIDIA_API_KEY"],
+)
+
+with open(os.environ["FINAL_FILE"], encoding="utf-8") as f:
+    final_content = f.read()
+
+draft_summary = final_content[:3000]
+
+SYSTEM = """당신은 한국 검색 SEO 전문가입니다.
+WordPress + 구글 검색 기준으로 메타 정보를 작성합니다.
+오직 JSON만 출력하고 다른 텍스트는 쓰지 마세요."""
+
+prompt = f"""다음 포스트 내용을 분석하여 SEO 메타 정보를 생성하세요.
+
+포스트 내용 (요약):
+{draft_summary}
+
+## 포커스 키워드 규칙
+1. focus_keyword: 독자가 검색할 핵심 키워드 (한국어, 2~4단어)
+2. focus_keyword_slug: 포커스 키워드의 영어 URL 슬러그 (소문자, 하이픈, 3~6단어)
+3. title_candidates: 모든 제목 후보에 focus_keyword를 반드시 포함, 55자 이내
+4. meta_description: focus_keyword를 앞부분에 포함, 90~150자, 클릭 유도
+
+## 검색형 제목 규칙
+- 모델명·도구명 등 고유명사를 제목 앞쪽에 배치
+- "방법", "설정", "비교", "설치", "사용법", "가이드" 중 하나 이상 포함
+- "~에 대해", "~을 알아보겠습니다" 같은 리포트 투 금지
+
+## 카테고리 분류 (category_type 필드)
+- "paper_review": 논문·arxiv·연구·벤치마크·학습·fine-tuning 관련
+- "dev_tools": 라이브러리·프레임워크·SDK·CLI·오픈소스·플랫폼·릴리즈 관련
+- "ai_ml": 위 두 카테고리에 해당하지 않는 AI/ML 일반
+
+## 시리즈 분류 (series 필드)
+아래 중 하나만 선택, 해당 없으면 null:
+- "로컬 LLM 실험실": VRAM·GPU·llama.cpp·vLLM·quantization·gguf·로컬 모델 실행
+- "AI 개발도구 워크플로우": Codex CLI·Claude Code·Gemini CLI·IDE 자동화
+- "AI 블로그 자동화": 파이프라인·WordPress·Rank Math·블로그 자동화
+
+## 썸네일 프롬프트 규칙
+- DALL-E 기준 영문, 1200x630 와이드 썸네일
+- 다크 배경, 청/녹색 accent, 코드/회로 모티프
+- 텍스트 오버레이 없음
+- 포스트 주제를 시각화하는 기술적 요소 포함
+
+## OG/Twitter 소셜 태그 규칙
+- og_title: 검색 결과보다 클릭·공유 유도에 최적화, 60자 이내, 이모지 사용 가능
+- og_description: 카카오·링크드인·페이스북 공유 시 표시, 80~120자, 이점 중심
+- (Twitter Card는 og 값을 재사용하므로 별도 필드 불필요)
+
+출력 (JSON):
+{{
+  "focus_keyword": "핵심 검색 키워드 (2~4단어, 한국어)",
+  "focus_keyword_slug": "focus-keyword-in-english-slug",
+  "title_candidates": ["제목1", "제목2", "제목3", "제목4", "제목5"],
+  "meta_description": "90~150자, 클릭 유도",
+  "og_title": "소셜 공유용 제목 (60자 이내, 이모지 허용)",
+  "og_description": "소셜 공유용 설명 (80~120자, 이점 중심)",
+  "tags": ["태그1", "태그2", "태그3", "태그4", "태그5"],
+  "category_type": "ai_ml",
+  "series": null,
+  "thumbnail_prompt": "영문 FLUX/DALL-E 이미지 프롬프트"
+}}"""
+
+response = client.chat.completions.create(
+    model="deepseek-ai/deepseek-v4-pro",
+    messages=[
+        {"role": "system", "content": SYSTEM},
+        {"role": "user", "content": prompt},
+    ],
+    temperature=0.3,
+    max_tokens=1024,
+    extra_body={"chat_template_kwargs": {"thinking": False}},
+)
+raw = response.choices[0].message.content or "{}"
+
+# JSON 파싱
+import re
+text = raw.strip()
+if "```" in text:
+    start = text.find("{", text.find("```"))
+    end = text.rfind("}") + 1
+    text = text[start:end]
+elif not text.startswith("{"):
+    start = text.find("{")
+    end = text.rfind("}") + 1
+    text = text[start:end]
+
+data = json.loads(text)
+with open(os.environ["SEO_JSON_FILE"], "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=2)
+print(json.dumps(data, ensure_ascii=False, indent=2))
+PYEOF
+```
+
+SEO JSON 파일을 읽어 아래 환경 변수를 설정합니다:
+
+```bash
+# SEO JSON → 환경변수 (python3 우선, 없으면 node 폴백)
+_json_field() {
+  local file="$1" key="$2" default="${3:-}"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import json; d=json.load(open('$file')); v=d.get('$key'); print(v if v else '$default')"
+  else
+    node -e "const d=require('$file'); const v=d['$key']; process.stdout.write(String(v||'$default'));"
+  fi
+}
+
+FOCUS_KEYWORD="$(_json_field "$SEO_JSON_FILE" focus_keyword)"
+FOCUS_KEYWORD_SLUG="$(_json_field "$SEO_JSON_FILE" focus_keyword_slug)"
+META_DESCRIPTION="$(_json_field "$SEO_JSON_FILE" meta_description)"
+POST_TAGS="$(
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c "import json; d=json.load(open('$SEO_JSON_FILE')); print(','.join(d.get('tags',[])))"
+  else
+    node -e "const d=require('$SEO_JSON_FILE'); process.stdout.write((d.tags||[]).join(','));"
+  fi
+)"
+CATEGORY_TYPE="$(_json_field "$SEO_JSON_FILE" category_type "ai_ml")"
+POST_SERIES="$(_json_field "$SEO_JSON_FILE" series "")"
+THUMBNAIL_PROMPT="$(_json_field "$SEO_JSON_FILE" thumbnail_prompt "AI technology concept, dark background, blue circuit board, neural network nodes")"
+OG_TITLE="$(_json_field "$SEO_JSON_FILE" og_title)"
+OG_DESCRIPTION="$(_json_field "$SEO_JSON_FILE" og_description)"
+
+# title_candidates 목록 출력
+if command -v python3 >/dev/null 2>&1; then
+  python3 -c "
+import json
+d = json.load(open('$SEO_JSON_FILE'))
+print('=== SEO 제목 후보 ===')
+for i, t in enumerate(d.get('title_candidates', []), 1):
+    print(f'{i}. {t}')
+print(f'포커스 키워드: {d.get(\"focus_keyword\",\"\")}')
+print(f'카테고리: {d.get(\"category_type\",\"\")} | 시리즈: {d.get(\"series\",\"없음\")}')
+print(f'태그: {\" | \".join(d.get(\"tags\",[]))}')
+"
+else
+  node -e "
+const d = require('$SEO_JSON_FILE');
+console.log('=== SEO 제목 후보 ===');
+(d.title_candidates||[]).forEach((t,i) => console.log((i+1)+'. '+t));
+console.log('포커스 키워드: '+(d.focus_keyword||''));
+console.log('카테고리: '+(d.category_type||'')+' | 시리즈: '+(d.series||'없음'));
+console.log('태그: '+(d.tags||[]).join(' | '));
+"
+fi
+```
+
+AskUserQuestion으로 제목을 선택합니다 (title_candidates 목록 기반). 선택 후:
+
+```bash
+POST_TITLE="{사용자가 선택한 제목}"
+# POST_SLUG는 기존 값 유지하거나 focus_keyword_slug 반영
+# POST_SLUG="${FOCUS_KEYWORD_SLUG:-$POST_SLUG}"
+```
+
+---
+
+## Phase 7.5: Codex CLI 대표이미지 생성
+
+Phase 7.3에서 생성한 `THUMBNAIL_PROMPT`를 사용해 Codex CLI로 대표이미지를 생성합니다.
+Codex 실패 시 Pollinations.ai(FLUX)로 자동 폴백합니다.
 
 ```bash
 ASSETS_DIR="$BLOG_WORKDIR/assets"
 mkdir -p "$ASSETS_DIR"
 THUMB_FILE="$ASSETS_DIR/${POST_DATE}-${POST_SLUG}-thumb.jpg"
 
-# Codex에게 이미지 생성 태스크 전달
+echo "=== 대표이미지 생성 (Codex CLI) ==="
+echo "프롬프트: $THUMBNAIL_PROMPT"
+
+# Codex CLI에게 DALL-E API로 이미지 생성 후 저장하는 Python 코드 실행 위임
 cat > /tmp/codex-image-task.md << CODEX_EOF
 # 이미지 생성 태스크
 
-다음 블로그 포스트의 대표 이미지(썸네일)를 생성해주세요.
+블로그 대표 이미지(1200x630 JPG)를 DALL-E API로 생성하여 지정 경로에 저장하세요.
 
-## 포스트 정보
-- 제목: {POST_TITLE}
-- 주제: {주제 한 줄 요약}
-- 앵글: {앵글}
+## 입력
+- 이미지 프롬프트: ${THUMBNAIL_PROMPT}
+- 저장 경로: ${THUMB_FILE}
+- 크기: 1792x1024 (DALL-E 3 와이드, 저장 시 1200x630으로 리사이즈)
 
 ## 작업 절차
-1. 포스트 주제에 맞는 영문 이미지 프롬프트를 작성합니다 (DALL-E 기준, 1200x630px 와이드 썸네일).
-   - 기술 블로그 썸네일 스타일 (다크 배경, 청/녹색 accent, 코드/회로 모티프)
-   - 텍스트 오버레이 없음
-   - 포스트 주제를 시각화하는 요소 포함
-2. 내장 image_gen 도구로 이미지를 생성합니다.
-3. 생성된 이미지를 \`${THUMB_FILE}\` 에 1200x630 JPG로 저장합니다.
-4. 저장 완료 후 "IMAGE_SAVED: ${THUMB_FILE}" 를 출력합니다. 실패 시 "IMAGE_FAILED: <이유>" 출력.
+1. OpenAI Python SDK로 DALL-E 3 이미지 생성 (`model="dall-e-3"`, `size="1792x1024"`, `quality="standard"`)
+2. 생성된 이미지 URL에서 bytes 다운로드
+3. Pillow(PIL)로 1200x630 리사이즈 후 JPG 저장 (`${THUMB_FILE}`)
+4. 성공 시 마지막 줄에 "IMAGE_SAVED: ${THUMB_FILE}" 출력
+5. 실패 시 마지막 줄에 "IMAGE_FAILED: <이유>" 출력
 
-## 주의사항
-- 파일 저장 외 다른 작업(git, 배포 등)은 하지 마세요.
+## 주의
+- Pillow 없으면 urllib로 원본 크기 그대로 저장 (리사이즈 스킵)
+- 파일 저장 외 다른 작업(git, 배포 등) 금지
 CODEX_EOF
 
-cat /tmp/codex-image-task.md | codex exec --model gpt-5.5 - 2>&1
+codex --approval-mode full-auto "$(cat /tmp/codex-image-task.md)" 2>&1
 CODEX_IMG_EXIT=$?
 rm -f /tmp/codex-image-task.md
 
-# 이미지 생성 확인
-if [ -f "$THUMB_FILE" ]; then
-    echo "대표이미지 생성 완료: $THUMB_FILE"
+# Codex 결과 확인 후 실패 시 Pollinations.ai 폴백
+if [ -f "$THUMB_FILE" ] && [ "$(stat -c%s "$THUMB_FILE" 2>/dev/null || echo 0)" -gt 1024 ]; then
+    echo "대표이미지 생성 완료 (Codex): $THUMB_FILE"
     THUMBNAIL_LOCAL="$THUMB_FILE"
 else
-    echo "대표이미지 생성 실패 — 업로드 없이 진행"
-    THUMBNAIL_LOCAL=""
+    echo "Codex 이미지 생성 실패 — Pollinations.ai(FLUX) 폴백 시도"
+    python3 - <<'PYEOF'
+import os, urllib.parse, urllib.request, sys
+
+prompt = os.environ.get("THUMBNAIL_PROMPT",
+    "AI technology concept, digital neural network, blue glowing nodes, dark background")
+thumb_file = os.environ["THUMB_FILE"]
+
+encoded = urllib.parse.quote(prompt)
+url = (
+    f"https://image.pollinations.ai/prompt/{encoded}"
+    f"?width=1200&height=630&model=flux&nologo=true&seed=42"
+)
+print(f"Pollinations URL: {url}")
+try:
+    req = urllib.request.Request(url, headers={"User-Agent": "bullro-blog/1.0"})
+    with urllib.request.urlopen(req, timeout=90) as resp:
+        data = resp.read()
+    if len(data) > 1024:
+        with open(thumb_file, "wb") as f:
+            f.write(data)
+        print(f"POLLINATIONS_SAVED: {thumb_file} ({len(data):,} bytes)")
+    else:
+        print(f"POLLINATIONS_FAILED: 응답 크기 너무 작음 ({len(data)}B)")
+except Exception as e:
+    print(f"POLLINATIONS_FAILED: {e}")
+PYEOF
+
+    if [ -f "$THUMB_FILE" ] && [ "$(stat -c%s "$THUMB_FILE" 2>/dev/null || echo 0)" -gt 1024 ]; then
+        echo "대표이미지 생성 완료 (Pollinations): $THUMB_FILE"
+        THUMBNAIL_LOCAL="$THUMB_FILE"
+    else
+        echo "대표이미지 생성 실패 (Codex + Pollinations 모두 실패) — 이미지 없이 발행"
+        THUMBNAIL_LOCAL=""
+    fi
 fi
 ```
 
@@ -452,11 +660,16 @@ AskUserQuestion으로 확인합니다:
 블로그 포스트 최종고 완성.
 
 파일: {FINAL_FILE}
+제목: {POST_TITLE}
+포커스 키워드: {FOCUS_KEYWORD}
+카테고리: {CATEGORY_TYPE} | 시리즈: {POST_SERIES 또는 "없음"}
+태그: {POST_TAGS}
+메타 설명: {META_DESCRIPTION}
 대표이미지: {THUMBNAIL_LOCAL 또는 "생성 실패"}
 평가: Claude={CLAUDE_VERDICT} | Codex={CODEX_VERDICT} | Gemini={GEMINI_VERDICT}
 글자수: {word_count}자
 
-A) WordPress에 지금 업로드 (대표이미지 포함)
+A) WordPress에 지금 업로드 (대표이미지 + SEO 포함)
 B) 파일만 저장 (나중에 수동 업로드)
 C) 추가 수정 후 재리뷰 (최대 2라운드)
 ```
@@ -467,104 +680,236 @@ A 선택 시 WordPress REST API 업로드 + Rank Math SEO + Slack 알림:
 source "$BLOG_WORKDIR/venv/bin/activate" 2>/dev/null || true
 export BASE_DIR="$BLOG_WORKDIR"
 
-python3 - <<'PYEOF'
-import os, sys, json, base64, urllib.request
+# ── Markdown → HTML 변환 (python3 → marked CLI 순으로 폴백) ──────────────────
+
+_md_to_html_file() {
+  local src="$1" dst="$2"
+
+  # frontmatter(--- ... ---) 및 CHANGES 주석 제거
+  local line2
+  line2=$(grep -n '^---$' "$src" | sed -n '2p' | cut -d: -f1)
+  if [ -n "$line2" ]; then
+    tail -n +$((line2+1)) "$src"
+  else
+    cat "$src"
+  fi | grep -v '<!-- CHANGES:' > /tmp/_post_body.md
+
+  # 1순위: python3 + pipeline.publisher._md_to_html
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - <<PYEOF > "$dst"
+import os, sys
 sys.path.insert(0, os.environ.get("BLOG_WORKDIR", "."))
+from pipeline.publisher import _md_to_html
+with open("/tmp/_post_body.md", encoding="utf-8") as f:
+    print(_md_to_html(f.read()))
+PYEOF
+    if [ -s "$dst" ]; then echo "HTML변환: python3+pipeline"; return 0; fi
+  fi
 
-from pipeline.publisher import (
-    _strip_frontmatter, _md_to_html, _resolve_tag_ids,
-    _upload_thumbnail, _update_rankmath_seo
-)
-from pipeline.config import cfg
-import markdown as md
+  # 2순위: marked CLI
+  if ! command -v marked >/dev/null 2>&1; then
+    echo "marked 미설치 — npm install -g marked 시도"
+    npm install -g marked --silent 2>/dev/null || true
+  fi
+  if command -v marked >/dev/null 2>&1; then
+    marked /tmp/_post_body.md -o "$dst"
+    if [ -s "$dst" ]; then echo "HTML변환: marked CLI"; return 0; fi
+  fi
 
-wp_url = cfg.WORDPRESS_URL.rstrip("/")
-cred = base64.b64encode(
-    f"{cfg.WORDPRESS_USERNAME}:{cfg.WORDPRESS_APP_PASSWORD}".encode()
-).decode()
+  # 3순위: node 인라인 (marked 모듈)
+  if command -v node >/dev/null 2>&1; then
+    node -e "
+const fs = require('fs');
+const md = fs.readFileSync('/tmp/_post_body.md', 'utf8');
+// 기본 변환: 코드블록·헤딩·리스트·표·볼드·이탤릭·링크
+let html = md
+  .replace(/\`\`\`(\w*)\n([\s\S]*?)\`\`\`/g, '<pre><code class=\"language-\$1\">\$2</code></pre>')
+  .replace(/^#{6}\s(.+)/gm, '<h6>\$1</h6>')
+  .replace(/^#{5}\s(.+)/gm, '<h5>\$1</h5>')
+  .replace(/^#{4}\s(.+)/gm, '<h4>\$1</h4>')
+  .replace(/^#{3}\s(.+)/gm, '<h3>\$1</h3>')
+  .replace(/^#{2}\s(.+)/gm, '<h2>\$1</h2>')
+  .replace(/^#{1}\s(.+)/gm, '<h1>\$1</h1>')
+  .replace(/\*\*(.+?)\*\*/g, '<strong>\$1</strong>')
+  .replace(/\*(.+?)\*/g, '<em>\$1</em>')
+  .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href=\"\$2\">\$1</a>')
+  .replace(/^\|(.+)\|$/gm, (m) => '<tr>' + m.split('|').slice(1,-1).map(c => '<td>' + c.trim() + '</td>').join('') + '</tr>')
+  .replace(/^---+$/gm, '<hr>')
+  .replace(/^- (.+)/gm, '<li>\$1</li>')
+  .replace(/^(\d+)\. (.+)/gm, '<li>\$2</li>')
+  .replace(/\n\n/g, '</p><p>');
+fs.writeFileSync('$dst', '<p>' + html + '</p>');
+" && echo "HTML변환: node 인라인" && return 0
+  fi
 
-with open(os.environ["FINAL_FILE"], encoding="utf-8") as f:
-    raw = f.read()
-
-html_body = _md_to_html(_strip_frontmatter(raw))
-
-# 태그 처리
-tag_names = os.environ.get("POST_TAGS", "").split(",")
-tag_ids = _resolve_tag_ids([t.strip() for t in tag_names if t.strip()], cred)
-
-chosen_title = os.environ.get("POST_TITLE", os.environ["POST_SLUG"])
-slug = os.environ["POST_SLUG"]
-meta_description = os.environ.get("META_DESCRIPTION", "")
-focus_keyword = os.environ.get("FOCUS_KEYWORD", "")
-
-payload = {
-    "title": chosen_title,
-    "content": html_body,
-    "status": "publish",
-    "slug": slug,
-    "categories": [cfg.WORDPRESS_DEFAULT_CATEGORY_ID],
-    "tags": tag_ids,
-    "excerpt": meta_description,
+  echo "ERROR: HTML 변환 방법 없음 — python3/marked/node 모두 실패"; return 1
 }
 
-# 대표이미지: 로컬 파일 → WordPress 미디어 업로드
-thumb_local = os.environ.get("THUMBNAIL_LOCAL", "")
-if thumb_local and os.path.exists(thumb_local):
-    with open(thumb_local, "rb") as f:
-        img_bytes = f.read()
-    media_endpoint = f"{wp_url}/?rest_route=/wp/v2/media"
-    media_req = urllib.request.Request(
-        media_endpoint,
-        data=img_bytes,
-        headers={
-            "Authorization": f"Basic {cred}",
-            "Content-Type": "image/jpeg",
-            "Content-Disposition": f'attachment; filename="{os.path.basename(thumb_local)}"',
-        },
-        method="POST",
-    )
-    with urllib.request.urlopen(media_req, timeout=60) as r:
-        media = json.loads(r.read().decode())
-        media_id = media.get("id")
-        print(f"미디어 업로드: id={media_id}, url={media.get('source_url')}")
-    if media_id:
-        payload["featured_media"] = media_id
+HTML_FILE="/tmp/_post_body.html"
+_md_to_html_file "$FINAL_FILE" "$HTML_FILE" || exit 1
+HTML_SIZE=$(wc -c < "$HTML_FILE")
+echo "HTML 크기: ${HTML_SIZE} bytes"
+if [ "$HTML_SIZE" -lt 200 ]; then
+  echo "ERROR: HTML 변환 결과가 너무 작음 (${HTML_SIZE}B) — 발행 중단"
+  exit 1
+fi
 
-data = json.dumps(payload).encode("utf-8")
-endpoint = f"{wp_url}/?rest_route=/wp/v2/posts"
-req = urllib.request.Request(
-    endpoint, data=data,
-    headers={"Authorization": f"Basic {cred}", "Content-Type": "application/json"},
-    method="POST",
-)
-with urllib.request.urlopen(req, timeout=30) as resp:
-    result = json.loads(resp.read().decode())
-    wp_id = result.get("id", 0)
-    wp_link = result.get("link", "")
-    print(f"WordPress 발행 완료: {wp_link} (id={wp_id})")
+# ── WordPress 업로드 (node 사용, python3 없는 환경 대응) ──────────────────────
 
-# Rank Math SEO
-if wp_id and (focus_keyword or meta_description):
-    _update_rankmath_seo(
-        wp_id=wp_id, cred=cred,
-        focus_keyword=focus_keyword,
-        seo_title=chosen_title,
-        meta_description=meta_description,
-    )
+node - <<'JSEOF'
+const fs   = require('fs');
+const https = require('https');
+const http  = require('http');
+const path  = require('path');
 
-# Slack 알림
-slack_payload = json.dumps({
-    "text": f"✅ 블로그 포스트 업로드 완료\n*{chosen_title}*\n{wp_link}\n리뷰어: Claude Code × Codex × Gemini"
-}).encode()
-slack_req = urllib.request.Request(
-    os.environ["SLACK_WEBHOOK_URL"],
-    data=slack_payload,
-    headers={"Content-Type": "application/json"},
-)
-urllib.request.urlopen(slack_req)
-print("Slack 알림 전송 완료")
-PYEOF
+const WP_URL   = process.env.WORDPRESS_URL.replace(/\/$/, '');
+const USER     = process.env.WORDPRESS_USERNAME;
+const PASS     = process.env.WORDPRESS_APP_PASSWORD;
+const CRED     = Buffer.from(`${USER}:${PASS}`).toString('base64');
+
+const title       = process.env.POST_TITLE    || process.env.POST_SLUG;
+const slug        = process.env.POST_SLUG;
+const excerpt     = process.env.META_DESCRIPTION || '';
+const focusKw     = process.env.FOCUS_KEYWORD    || '';
+const ogTitle     = process.env.OG_TITLE         || '';
+const ogDesc      = process.env.OG_DESCRIPTION   || '';
+const tagIds      = (process.env.WP_TAG_IDS || '').split(',').filter(Boolean).map(Number);
+const categoryIds = (process.env.WP_CATEGORY_IDS || process.env.WORDPRESS_DEFAULT_CATEGORY_ID || '61')
+                      .split(',').filter(Boolean).map(Number);
+const thumbLocal  = process.env.THUMBNAIL_LOCAL  || '';
+const slackUrl    = process.env.SLACK_WEBHOOK_URL || '';
+
+const htmlBody = fs.readFileSync('/tmp/_post_body.html', 'utf8');
+
+function request(urlStr, method, headers, body) {
+  return new Promise((resolve, reject) => {
+    const u   = new URL(urlStr);
+    const lib = u.protocol === 'https:' ? https : http;
+    const opts = {
+      hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80),
+      path: u.pathname + u.search, method,
+      headers: { ...headers, 'Content-Length': body ? Buffer.byteLength(body) : 0 },
+      rejectUnauthorized: false,
+    };
+    const req = lib.request(opts, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }));
+    });
+    req.on('error', reject);
+    if (body) req.write(body);
+    req.end();
+  });
+}
+
+async function getOrCreateTag(name) {
+  const search = await request(
+    `${WP_URL}/?rest_route=/wp/v2/tags&search=${encodeURIComponent(name)}&per_page=5`,
+    'GET', { Authorization: `Basic ${CRED}` }
+  );
+  const tags = JSON.parse(search.body);
+  const found = tags.find(t => t.name.toLowerCase() === name.toLowerCase());
+  if (found) return found.id;
+  const create = await request(
+    `${WP_URL}/?rest_route=/wp/v2/tags`, 'POST',
+    { Authorization: `Basic ${CRED}`, 'Content-Type': 'application/json' },
+    JSON.stringify({ name })
+  );
+  return JSON.parse(create.body).id;
+}
+
+async function uploadThumb(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return { id: null, url: '' };
+  const img = fs.readFileSync(filePath);
+  if (img.length < 1024) return { id: null, url: '' };
+  const res = await request(
+    `${WP_URL}/?rest_route=/wp/v2/media`, 'POST',
+    {
+      Authorization: `Basic ${CRED}`,
+      'Content-Type': 'image/jpeg',
+      'Content-Disposition': `attachment; filename="${path.basename(filePath)}"`,
+    },
+    img
+  );
+  const m = JSON.parse(res.body);
+  console.log(`대표이미지 업로드: id=${m.id}, url=${m.source_url || ''}`);
+  return { id: m.id || null, url: m.source_url || '' };
+}
+
+async function updateRankMath(wpId, thumbUrl) {
+  if (!focusKw && !excerpt) return;
+  const meta = {};
+  if (focusKw)            meta.rank_math_focus_keyword   = focusKw;
+  if (title)              meta.rank_math_title            = title;
+  if (excerpt)            meta.rank_math_description      = excerpt;
+  const effOgTitle = ogTitle || title;
+  const effOgDesc  = ogDesc  || excerpt;
+  if (effOgTitle)  meta.rank_math_og_title         = effOgTitle;
+  if (effOgDesc)   meta.rank_math_og_description   = effOgDesc;
+  if (thumbUrl)    meta.rank_math_og_image          = thumbUrl;
+  if (effOgTitle || effOgDesc || thumbUrl) {
+    meta.rank_math_twitter_title       = effOgTitle;
+    meta.rank_math_twitter_description = effOgDesc;
+    if (thumbUrl) meta.rank_math_twitter_image = thumbUrl;
+  } else {
+    meta.rank_math_twitter_use_og = 1;
+  }
+  await request(
+    `${WP_URL}/?rest_route=/rankmath/v1/updateMeta`, 'POST',
+    { Authorization: `Basic ${CRED}`, 'Content-Type': 'application/json' },
+    JSON.stringify({ objectType: 'post', objectID: wpId, meta })
+  );
+  console.log(`Rank Math SEO 업데이트 완료 (keyword='${focusKw}', og_image=${thumbUrl ? '있음' : '없음'})`);
+}
+
+(async () => {
+  // 태그 ID 수집
+  const tagNames = (process.env.POST_TAGS || '').split(',').filter(Boolean).map(s => s.trim());
+  const resolvedTagIds = tagIds.length ? tagIds
+    : await Promise.all(tagNames.map(getOrCreateTag)).catch(() => []);
+
+  // 대표이미지 업로드
+  const { id: mediaId, url: thumbUrl } = await uploadThumb(thumbLocal);
+
+  // 포스트 페이로드
+  const payload = {
+    title, content: htmlBody, status: 'publish',
+    slug, categories: categoryIds, tags: resolvedTagIds, excerpt,
+  };
+  if (mediaId) payload.featured_media = mediaId;
+
+  const res = await request(
+    `${WP_URL}/?rest_route=/wp/v2/posts`, 'POST',
+    { Authorization: `Basic ${CRED}`, 'Content-Type': 'application/json' },
+    JSON.stringify(payload)
+  );
+  const post = JSON.parse(res.body);
+  const wpId   = post.id   || 0;
+  const wpLink = post.link || '';
+  console.log(`WordPress 발행 완료: ${wpLink} (id=${wpId})`);
+  console.log(`카테고리: ${categoryIds} | 태그 수: ${resolvedTagIds.length} | 시리즈: ${process.env.POST_SERIES || '없음'}`);
+
+  // Rank Math SEO
+  if (wpId) await updateRankMath(wpId, thumbUrl);
+
+  // Slack 알림
+  if (slackUrl && wpId) {
+    await request(slackUrl, 'POST',
+      { 'Content-Type': 'application/json' },
+      JSON.stringify({ text: `✅ 블로그 포스트 업로드 완료\n*${title}*\n${wpLink}\n키워드: ${focusKw} | 카테고리: ${categoryIds}\n리뷰어: Claude Code × Codex × Gemini` })
+    );
+    console.log('Slack 알림 전송 완료');
+  }
+})().catch(e => { console.error('발행 실패:', e.message); process.exit(1); });
+JSEOF
 ```
+
+> **환경별 HTML 변환 우선순위:**
+> 1. `python3` + `pipeline.publisher._md_to_html` (Mermaid 변환·LLM 아티팩트 제거 포함)
+> 2. `marked` CLI (`npm install -g marked` 자동 시도)
+> 3. `node` 인라인 정규식 변환 (기본 Markdown 요소만)
+>
+> **WordPress 업로드는 항상 `node`로 처리** — python3 없는 환경에서도 동작.
 
 ---
 
@@ -585,10 +930,18 @@ jq -n \
   --arg codex_verdict "{CODEX_VERDICT}" \
   --arg gemini_verdict "{GEMINI_VERDICT}" \
   --arg outcome "{A=uploaded / B=saved / C=revised}" \
+  --arg post_title "${POST_TITLE}" \
+  --arg focus_keyword "${FOCUS_KEYWORD}" \
+  --arg category_type "${CATEGORY_TYPE}" \
+  --arg post_series "${POST_SERIES}" \
+  --arg thumbnail_local "${THUMBNAIL_LOCAL}" \
   '{date:$date, type:"blog-draft", topic:$topic, draft_file:$draft_file,
     final_file:$final_file, angle:$angle, draft_model:$draft_model,
     claude_verdict:$claude_verdict, codex_verdict:$codex_verdict,
-    gemini_verdict:$gemini_verdict, outcome:$outcome}' \
+    gemini_verdict:$gemini_verdict, outcome:$outcome,
+    post_title:$post_title, focus_keyword:$focus_keyword,
+    category_type:$category_type, post_series:$post_series,
+    thumbnail_local:$thumbnail_local}' \
   >> "$DISCUSS_DIR/history.jsonl"
 
 grep -qxF 'posts/' "$BLOG_WORKDIR/.gitignore" 2>/dev/null || \
@@ -613,7 +966,11 @@ grep -qxF 'posts/' "$BLOG_WORKDIR/.gitignore" 2>/dev/null || \
 
 - **초안 파이프라인**: DeepSeek V4 Pro (P2 팩트 합성) → GLM-5.1 thinking (P3 본문, P7 최종고)
 - **리뷰어**: Claude Code (종합·구조) + Codex (기술 정확성) + Gemini (SEO·가독성)
-- NVIDIA API: `openai` 라이브러리 + `base_url=https://integrate.api.nvidia.com/v1` (nvidia-test 동일 패턴)
+- **SEO 메타**: Phase 7.3에서 DeepSeek이 제목 후보 5개·포커스 키워드·메타 설명·태그·카테고리·시리즈·썸네일 프롬프트 생성
+- **카테고리**: `_determine_category(title, tags)` 자동 결정 + 시리즈 카테고리 추가 (publisher.py와 동일 로직)
+- **대표이미지**: Codex CLI (`codex --approval-mode full-auto`) → 실패 시 Pollinations.ai(FLUX) 자동 폴백
+- **Rank Math SEO**: `focus_keyword` + `seo_title` + `meta_description` 업데이트 (발행 후 자동)
+- NVIDIA API: `openai` 라이브러리 + `base_url=https://integrate.api.nvidia.com/v1`
 - GLM-5.1 extra_body: `{"chat_template_kwargs": {"enable_thinking": True, "clear_thinking": True}}`
 - DeepSeek extra_body: `{"chat_template_kwargs": {"thinking": False}}`
 - WordPress 인증: Application Password (관리자 > 프로필에서 생성, OAuth 불필요)

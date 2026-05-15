@@ -66,8 +66,9 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
         payload["date"] = schedule_date
 
     # 썸네일 업로드 (실패 시 본문 삽입 없이 로그만 남김 — 이미지 중복 방지)
+    uploaded_thumb_url = ""
     if post.thumbnail_url:
-        media_id = _upload_thumbnail(post.thumbnail_url, cred, post.chosen_title)
+        media_id, uploaded_thumb_url = _upload_thumbnail(post.thumbnail_url, cred, post.chosen_title)
         if media_id:
             payload["featured_media"] = media_id
 
@@ -90,7 +91,7 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
             wp_id = result.get("id", 0)
             log.info(f"WordPress 발행 완료: {result.get('link')}")
 
-            # Rank Math SEO 메타 업데이트 (포커스 키워드, SEO 제목, 메타 설명)
+            # Rank Math SEO 메타 업데이트 (검색 SEO + OG + Twitter Card)
             if wp_id and (post.seo.focus_keyword or post.seo.meta_description):
                 _update_rankmath_seo(
                     wp_id=wp_id,
@@ -98,6 +99,7 @@ def publish_to_wordpress(post: Post, schedule_date: str = "") -> PublishResult:
                     focus_keyword=post.seo.focus_keyword,
                     seo_title=post.chosen_title,
                     meta_description=post.seo.meta_description,
+                    og_image_url=uploaded_thumb_url,
                 )
 
             return PublishResult(
@@ -381,8 +383,8 @@ def _get_or_create_tag(name: str, cred: str) -> int | None:
 # ── 썸네일 업로드 ─────────────────────────────────────────────────────────────
 
 
-def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
-    """썸네일을 WordPress Media API로 업로드하고 media ID 반환. 실패 시 None."""
+def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> tuple[int | None, str]:
+    """썸네일을 WordPress Media API로 업로드하고 (media_id, source_url) 반환. 실패 시 (None, '')."""
     try:
         img_resp = requests.get(thumbnail_url, timeout=90)
         img_resp.raise_for_status()
@@ -392,10 +394,10 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
         # HTML 오류 페이지를 이미지로 잘못 업로드하는 것 방지
         if not content_type.startswith("image/"):
             log.warning(f"썸네일 Content-Type 비정상: {content_type} — 업로드 스킵")
-            return None
+            return None, ""
         if len(img_bytes) < 1024:
             log.warning(f"썸네일 파일 크기 너무 작음 ({len(img_bytes)}B) — 업로드 스킵")
-            return None
+            return None, ""
 
         filename = _safe_media_filename(title, content_type)
         endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/wp/v2/media"
@@ -413,11 +415,12 @@ def _upload_thumbnail(thumbnail_url: str, cred: str, title: str) -> int | None:
         with urllib.request.urlopen(req, timeout=60) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             media_id = result.get("id")
-            log.info(f"썸네일 업로드 완료: media_id={media_id}")
-            return media_id
+            source_url = result.get("source_url", "")
+            log.info(f"썸네일 업로드 완료: media_id={media_id}, url={source_url}")
+            return media_id, source_url
     except Exception as e:
         log.warning(f"썸네일 WordPress 업로드 실패: {e}")
-        return None
+        return None, ""
 
 
 def _safe_media_filename(title: str, content_type: str) -> str:
@@ -451,22 +454,60 @@ def _update_rankmath_seo(
     focus_keyword: str,
     seo_title: str,
     meta_description: str,
+    og_image_url: str = "",
+    og_title: str = "",
+    og_description: str = "",
+    twitter_title: str = "",
+    twitter_description: str = "",
+    twitter_image_url: str = "",
 ) -> None:
     """Rank Math REST API로 포스트 SEO 메타 업데이트.
 
     설정되는 필드:
-    - rank_math_focus_keyword : Rank Math 포커스 키워드
-    - rank_math_title         : Rank Math SEO 제목 (검색 결과 표시용)
-    - rank_math_description   : Rank Math 메타 설명 (검색 결과 스니펫)
+    - rank_math_focus_keyword      : 포커스 키워드
+    - rank_math_title              : 검색 결과 SEO 제목
+    - rank_math_description        : 검색 결과 메타 설명
+    - rank_math_og_title           : OG 제목 (SNS 공유)
+    - rank_math_og_description     : OG 설명 (SNS 공유)
+    - rank_math_og_image           : OG 이미지 URL (SNS 공유)
+    - rank_math_twitter_use_og     : Twitter에서 OG 설정 재사용 (og_title/description/image 없을 때)
+    - rank_math_twitter_title      : Twitter 전용 제목 (지정 시)
+    - rank_math_twitter_description: Twitter 전용 설명 (지정 시)
+    - rank_math_twitter_image      : Twitter 전용 이미지 (지정 시)
     """
     endpoint = f"{cfg.WORDPRESS_URL}/?rest_route=/rankmath/v1/updateMeta"
     meta: dict = {}
+
+    # 검색 SEO
     if focus_keyword:
         meta["rank_math_focus_keyword"] = focus_keyword
     if seo_title:
         meta["rank_math_title"] = seo_title
     if meta_description:
         meta["rank_math_description"] = meta_description
+
+    # Open Graph (SNS 공유)
+    effective_og_title = og_title or seo_title
+    effective_og_desc = og_description or meta_description
+    if effective_og_title:
+        meta["rank_math_og_title"] = effective_og_title
+    if effective_og_desc:
+        meta["rank_math_og_description"] = effective_og_desc
+    if og_image_url:
+        meta["rank_math_og_image"] = og_image_url
+
+    # Twitter Card
+    effective_tw_title = twitter_title or og_title or seo_title
+    effective_tw_desc = twitter_description or og_description or meta_description
+    effective_tw_img = twitter_image_url or og_image_url
+    if effective_tw_title or effective_tw_desc or effective_tw_img:
+        meta["rank_math_twitter_title"] = effective_tw_title
+        meta["rank_math_twitter_description"] = effective_tw_desc
+        if effective_tw_img:
+            meta["rank_math_twitter_image"] = effective_tw_img
+    else:
+        # OG 데이터를 Twitter에 재사용
+        meta["rank_math_twitter_use_og"] = 1
 
     payload = json.dumps({
         "objectType": "post",
@@ -487,7 +528,10 @@ def _update_rankmath_seo(
         with urllib.request.urlopen(req, timeout=15) as resp:
             body = json.loads(resp.read().decode("utf-8"))
             if body.get("success"):
-                log.info(f"Rank Math SEO 메타 업데이트 완료 (post_id={wp_id}, keyword='{focus_keyword}')")
+                log.info(
+                    f"Rank Math SEO 업데이트 완료 (post_id={wp_id}, "
+                    f"keyword='{focus_keyword}', og_image={'있음' if og_image_url else '없음'})"
+                )
             else:
                 log.warning(f"Rank Math SEO 업데이트 응답 이상: {body}")
     except Exception as e:
